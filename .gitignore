@@ -1,0 +1,126 @@
+work
+# ==========================================
+
+# Bibliotecas e Tecnologia (PROIBIDO)
+
+# ==========================================
+
+*.db
+
+*.sldb
+
+*.lib
+
+*.lef
+
+*.tf
+
+*.ndm
+
+libs/
+
+
+
+# ==========================================
+
+# Synopsys Design Compiler (Síntese)
+
+# ==========================================
+
+*.ddc
+
+*.svf
+
+*_syn.v
+
+*_syn.sdc
+
+alib-52/
+
+work/
+
+*.syn
+
+command.log
+
+default.svf
+
+
+
+# ==========================================
+
+# Synopsys Formality
+
+# ==========================================
+
+FM_INFO/
+
+FM_WORK/
+
+fm_core*
+
+formality.log
+
+formality.lck
+
+formality_svf/
+
+
+
+# ==========================================
+
+# Synopsys VCS & Verdi (Simulação)
+
+# ==========================================
+
+csrc/
+
+simv
+
+simv.*
+
+*.daidir/
+
+*.fsdb
+
+*.vcd
+
+*.vpd
+
+novas.*
+
+verdiLog/
+
+DVEfiles/
+
+AN.DB/
+
+ucli.key
+
+*.vlogan*
+
+verdi_config_file
+
+
+
+# ==========================================
+
+# Relatórios e Logs Gerais
+
+# ==========================================
+
+# *.log
+
+# *.rpt
+
+
+
+# ==========================================
+
+# Arquivos de sistema temporários
+
+# ==========================================
+
+*~
+
+.DS_Store
