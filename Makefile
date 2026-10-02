@@ -14,16 +14,32 @@ UPF_DIR     = upf
 # ==========================================
 # PKG_FILES = $(RTL_DIR)/aes_spi_pkg.sv # Descomentar se for usar um package para structs/defines
 
-RTL_FILES = \
-    $(RTL_DIR)/spi_interface.sv \
-    $(RTL_DIR)/sync_cdc.sv \
-    $(RTL_DIR)/reg_bank.sv \
-    $(RTL_DIR)/aes_core.sv \
-    $(RTL_DIR)/power_ctrl.sv \
-    $(RTL_DIR)/aes_spi_top.sv
+# real
 
-TB_FILES = \
-    $(TB_DIR)/tb_aes_spi_top.sv
+# RTL_FILES = \
+#     $(RTL_DIR)/spi_interface.sv \
+#     $(RTL_DIR)/sync_cdc.sv \
+#     $(RTL_DIR)/reg_bank.sv \
+#     $(RTL_DIR)/aes_core.sv \
+#     $(RTL_DIR)/power_ctrl.sv \
+#     $(RTL_DIR)/aes_spi_top.sv
+
+# TB_FILES = \
+#     $(TB_DIR)/tb_aes_spi_top.sv
+
+# teste
+
+# ==========================================
+# Arquivos
+# ==========================================
+RTL_FILES = $(RTL_DIR)/porta_and.sv
+TB_FILES  = $(TB_DIR)/tb_porta_and.sv
+
+# ==========================================
+# Top do testbench
+# ==========================================
+TOP = tb_porta_and
+
 
 # ==========================================
 # Top do testbench
