@@ -50,6 +50,23 @@ module tb_semana_02;
     logic [127:0] shiftrows_in, shiftrows_out;
 
     // ------------------------------------------------------------------------
+    // Sinais para os Módulos Inversos (Bônus)
+    // ------------------------------------------------------------------------
+    logic [127:0] inv_subbytes_out;
+    logic [127:0] inv_shiftrows_out;
+    logic [127:0] test_vector_bonus;
+
+    minisoc_aes_inv_sub_bytes u_inv_sub_bytes (
+        .state_in (subbytes_out),
+        .state_out(inv_subbytes_out)
+    );
+
+    minisoc_aes_inv_shift_rows u_inv_shift_rows (
+        .state_in (shiftrows_out),
+        .state_out(inv_shiftrows_out)
+    );
+
+    // ------------------------------------------------------------------------
     // 3. Instanciação dos Módulos (DUTs)
     // ------------------------------------------------------------------------
     minisoc_aes_sbox u_sbox (
@@ -164,6 +181,34 @@ module tb_semana_02;
             $display("  STATUS FINAL: FAIL - %0d ERRO(S) ENCONTRADO(S)!", error_count);
         end
         $display("==================================================\n");
+
+        // ------------------------------------------------------------------------
+        // TESTE 4 (BONUS): Identidade InvSubBytes(SubBytes(x)) e InvShiftRows(ShiftRows(x))
+        // ------------------------------------------------------------------------
+        $display("\n[4/4] Testando Identidade das Transformacoes Inversas (Bonus)...");
+        
+        test_vector_bonus = 128'h00112233445566778899aabbccddeeff;
+        subbytes_in  = test_vector_bonus;
+        shiftrows_in = test_vector_bonus;
+        #1;
+
+        // Checagem InvSubBytes(SubBytes(x)) == x
+        assert (inv_subbytes_out == test_vector_bonus)
+            else begin
+                $error("[ERRO BONUS] InvSubBytes(SubBytes(x)) != x\n  Obtido : %h\n  Esperado: %h", 
+                    inv_subbytes_out, test_vector_bonus);
+                error_count++;
+            end
+
+        // Checagem InvShiftRows(ShiftRows(x)) == x
+        assert (inv_shiftrows_out == test_vector_bonus)
+            else begin
+                $error("[ERRO BONUS] InvShiftRows(ShiftRows(x)) != x\n  Obtido : %h\n  Esperado: %h", 
+                    inv_shiftrows_out, test_vector_bonus);
+                error_count++;
+            end
+
+        if (error_count == 0) $display("  -> Bonus: PASS (Propriedades de Identidade validadas)");
 
         $finish;
     end
