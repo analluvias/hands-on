@@ -1,5 +1,3 @@
-`timescale 1ns/1ps
-
 module tb_semana_02;
 
     int error_count = 0;
@@ -83,7 +81,7 @@ module tb_semana_02;
         $display("\n[1/3] Testando S-Box (256 entradas)...");
         for (int i = 0; i < 256; i++) begin
             sbox_in = i[7:0];
-            #1; // Atraso para propagação combinacional
+            #1; // Atraso para propagacao combinacional
             if (sbox_out !== sbox_ref[i]) begin
                 $error("[ERRO S-Box] Entrada 0x%02X: Obtido 0x%02X, Esperado 0x%02X", 
                        sbox_in, sbox_out, sbox_ref[i]);
