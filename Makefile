@@ -10,23 +10,26 @@ FM_DIR      = formal
 UPF_DIR     = upf
 
 # ==========================================
-# Arquivos do RTL (Semana 2)
+# Arquivos do RTL (Semana 3)
 # ==========================================
 RTL_FILES = \
     $(RTL_DIR)/minisoc_aes_sbox.sv \
     $(RTL_DIR)/minisoc_aes_sub_bytes.sv \
     $(RTL_DIR)/minisoc_aes_shift_rows.sv \
+    $(RTL_DIR)/minisoc_aes_mix_columns.sv \
+    $(RTL_DIR)/minisoc_aes_add_round_key.sv \
     $(RTL_DIR)/minisoc_aes_inv_sbox.sv \
     $(RTL_DIR)/minisoc_aes_inv_sub_bytes.sv \
-    $(RTL_DIR)/minisoc_aes_inv_shift_rows.sv
+    $(RTL_DIR)/minisoc_aes_inv_shift_rows.sv \
+    $(RTL_DIR)/minisoc_aes_inv_mix_columns.sv
 
 TB_FILES = \
-    $(TB_DIR)/tb_semana_02.sv
+    $(TB_DIR)/tb_semana_03.sv
 
 # ==========================================
 # Top do testbench
 # ==========================================
-TOP = tb_semana_02
+TOP = tb_semana_03
 
 # ==========================================
 # Flags
