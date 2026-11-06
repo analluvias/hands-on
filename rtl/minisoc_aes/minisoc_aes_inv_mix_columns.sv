@@ -3,7 +3,7 @@ module minisoc_aes_inv_mix_columns (
     output logic [127:0] state_out
 );
 
-    // Multiplicação básica por 0x02 em GF(2^8)
+    // Multiplicação básica por 0x02 em GF(2^8) (xtime)
     function automatic logic [7:0] xtime(input logic [7:0] b);
         return (b[7] == 1'b1) ? ((b << 1) ^ 8'h1b) : (b << 1);
     endfunction
@@ -14,7 +14,7 @@ module minisoc_aes_inv_mix_columns (
         x2 = xtime(b);
         x4 = xtime(x2);
         x8 = xtime(x4);
-        return x8 ^ b;
+        return (x8 ^ b);
     endfunction
 
     function automatic logic [7:0] mul_0b(input logic [7:0] b);
@@ -22,7 +22,7 @@ module minisoc_aes_inv_mix_columns (
         x2 = xtime(b);
         x4 = xtime(x2);
         x8 = xtime(x4);
-        return x8 ^ x2 ^ b;
+        return (x8 ^ x2 ^ b);
     endfunction
 
     function automatic logic [7:0] mul_0d(input logic [7:0] b);
@@ -30,7 +30,7 @@ module minisoc_aes_inv_mix_columns (
         x2 = xtime(b);
         x4 = xtime(x2);
         x8 = xtime(x4);
-        return x8 ^ x4 ^ b;
+        return (x8 ^ x4 ^ b);
     endfunction
 
     function automatic logic [7:0] mul_0e(input logic [7:0] b);
@@ -38,7 +38,7 @@ module minisoc_aes_inv_mix_columns (
         x2 = xtime(b);
         x4 = xtime(x2);
         x8 = xtime(x4);
-        return x8 ^ x4 ^ x2;
+        return (x8 ^ x4 ^ x2);
     endfunction
 
     // Transformação InvMixColumns de 1 coluna (4 bytes de 32 bits)
@@ -51,19 +51,16 @@ module minisoc_aes_inv_mix_columns (
         s2 = col_in[15:8];
         s3 = col_in[7:0];
 
-        // s'0 = ({0e} * s0) ^ ({0b} * s1) ^ ({0d} * s2) ^ ({09} * s3)
+        // Multiplicação matricial sobre GF(2^8) conforme FIPS-197 (Seção 5.3.3)
         s0_out = mul_0e(s0) ^ mul_0b(s1) ^ mul_0d(s2) ^ mul_09(s3);
-        // s'1 = ({09} * s0) ^ ({0e} * s1) ^ ({0b} * s2) ^ ({0d} * s3)
         s1_out = mul_09(s0) ^ mul_0e(s1) ^ mul_0b(s2) ^ mul_0d(s3);
-        // s'2 = ({0d} * s0) ^ ({09} * s1) ^ ({0e} * s2) ^ ({0b} * s3)
         s2_out = mul_0d(s0) ^ mul_09(s1) ^ mul_0e(s2) ^ mul_0b(s3);
-        // s'3 = ({0b} * s0) ^ ({0d} * s1) ^ ({09} * s2) ^ ({0e} * s3)
         s3_out = mul_0b(s0) ^ mul_0d(s1) ^ mul_09(s2) ^ mul_0e(s3);
 
         return {s0_out, s1_out, s2_out, s3_out};
     endfunction
 
-    // Aplicação da transformação às 4 colunas (Words 0 a 3) de 128 bits
+    // Aplicação da transformação às 4 colunas (Words 0 a 3) do Estado de 128 bits
     assign state_out = {
         inv_mix_one_column(state_in[127:96]), // Coluna 0
         inv_mix_one_column(state_in[95:64]),  // Coluna 1
