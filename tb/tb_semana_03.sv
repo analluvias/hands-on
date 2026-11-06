@@ -69,8 +69,7 @@ module tb_semana_03;
         $display("\n[1/3] Testando Cifragem Direta (FIPS-197, Apêndice B)...");
 
         // --- Rodada 1 ---
-        // Start of Round 1
-        subbytes_in = 128'h193de3bea0f4e22b9ac68d2ae9f84808; 
+        subbytes_in = 128'h193de3bea0f4e22b9ac68d2ae9f84808;
         #1;
         assert (subbytes_out == 128'hd42711aee0bf98f1b8b45de51e415230)
             else begin $error("[ERRO SubBytes R1] Obtido: %h", subbytes_out); error_count++; end
@@ -88,13 +87,14 @@ module tb_semana_03;
         addroundkey_in  = mixcolumns_out;
         addroundkey_key = 128'ha0fafe1788542cb123a339392a6c7605; // Round Key 1
         #1;
-        assert (addroundkey_out == 128'ha49c7ff2689f352b6b5be043026a5049)
+        // CORRIGIDO: byte 10 deve ser EA (não E0)
+        assert (addroundkey_out == 128'ha49c7ff2689f352b6b5bea43026a5049)
             else begin $error("[ERRO AddRoundKey R1] Obtido: %h", addroundkey_out); error_count++; end
 
         $display("  -> Cifragem Rodada 1: PASS");
 
         // --- Rodada 10 (Sem MixColumns) ---
-        subbytes_in = 128'hbd6e7c3df2b5779e0b61216e8b10b689; // Start of Round 10
+        subbytes_in = 128'hbd6e7c3df2b5779e0b61216e8b10b689;
         #1;
         assert (subbytes_out == 128'h7a9f102789d5f50b2beffd9f3dca4ea7)
             else begin $error("[ERRO SubBytes R10] Obtido: %h", subbytes_out); error_count++; end
@@ -107,7 +107,8 @@ module tb_semana_03;
         addroundkey_in  = shiftrows_out;
         addroundkey_key = 128'hd014f9a8c9ee2589e13f0cc8b6630ca6; // Round Key 10
         #1;
-        assert (addroundkey_out == 128'haaa73a36b5a16baecaf51c738bfcf939) // Output de Cifragem
+        // CORRIGIDO: bytes 1..5 e 11 corrigidos (saída = ciphertext FIPS-197)
+        assert (addroundkey_out == 128'haac1040f40016baecaf51cc38bfcf939)
             else begin $error("[ERRO AddRoundKey R10] Obtido: %h", addroundkey_out); error_count++; end
 
         $display("  -> Cifragem Rodada 10: PASS");
@@ -119,7 +120,6 @@ module tb_semana_03;
         $display("\n[2/3] Testando Decriptação Inversa (FIPS-197, Apêndice C.1)...");
 
         // Vetores da Rodada 1 Inversa
-        // iState (after AddRoundKey com Round Key 10): 7ad5fda789ef4e272bca100b3d9ff59f
         inv_shiftrows_in = 128'h7ad5fda789ef4e272bca100b3d9ff59f;
         #1;
         assert (inv_shiftrows_out == 128'h7a9f102789d5f50b2beffd9f3dca4ea7)
@@ -130,10 +130,11 @@ module tb_semana_03;
         assert (inv_subbytes_out == 128'hbd6e7c3df2b5779e0b61216e8b10b689)
             else begin $error("[ERRO InvSubBytes R1] Obtido: %h", inv_subbytes_out); error_count++; end
 
-        // Teste da transformação InvMixColumns no vetor intermediário do Apêndice C.1 (Rodada 1 de Decriptação)
+        // InvMixColumns (Apêndice C.1, rodada 1 inversa)
         inv_mixcolumns_in = 128'h4773b4d630220100a7a706f8546f6e23;
         #1;
-        assert (inv_mixcolumns_out == 128'h87a1d7977453000b41126e8346123fc1)
+        // CORRIGIDO: valor esperado recalculado (o anterior não correspondia à entrada)
+        assert (inv_mixcolumns_out == 128'h1e94419d5b674c635ad61c6e21adf70d)
             else begin $error("[ERRO InvMixColumns] Obtido: %h", inv_mixcolumns_out); error_count++; end
 
         $display("  -> Decriptação Inversa (Apêndice C.1): PASS");
