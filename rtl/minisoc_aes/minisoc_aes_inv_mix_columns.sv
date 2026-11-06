@@ -8,7 +8,7 @@ module minisoc_aes_inv_mix_columns (
         return (b[7] == 1'b1) ? ((b << 1) ^ 8'h1b) : (b << 1);
     endfunction
 
-    // Funções auxiliares para multiplicação pelas constantes da FIPS-197
+    // Funções auxiliares para multiplicação pelas constantes FIPS-197
     function automatic logic [7:0] mul_09(input logic [7:0] b);
         logic [7:0] x2, x4, x8;
         x2 = xtime(b);
@@ -41,7 +41,7 @@ module minisoc_aes_inv_mix_columns (
         return (x8 ^ x4 ^ x2);
     endfunction
 
-    // Transformação InvMixColumns de 1 coluna (4 bytes de 32 bits)
+    // Transformação InvMixColumns em 1 coluna (4 bytes de 32 bits)
     function automatic logic [31:0] inv_mix_one_column(input logic [31:0] col_in);
         logic [7:0] s0, s1, s2, s3;
         logic [7:0] s0_out, s1_out, s2_out, s3_out;
@@ -51,7 +51,7 @@ module minisoc_aes_inv_mix_columns (
         s2 = col_in[15:8];
         s3 = col_in[7:0];
 
-        // Multiplicação matricial sobre GF(2^8) conforme FIPS-197 (Seção 5.3.3)
+        // Multiplicação matricial sobre GF(2^8) conforme FIPS-197
         s0_out = mul_0e(s0) ^ mul_0b(s1) ^ mul_0d(s2) ^ mul_09(s3);
         s1_out = mul_09(s0) ^ mul_0e(s1) ^ mul_0b(s2) ^ mul_0d(s3);
         s2_out = mul_0d(s0) ^ mul_09(s1) ^ mul_0e(s2) ^ mul_0b(s3);
@@ -60,7 +60,7 @@ module minisoc_aes_inv_mix_columns (
         return {s0_out, s1_out, s2_out, s3_out};
     endfunction
 
-    // Aplicação da transformação às 4 colunas (Words 0 a 3) do Estado de 128 bits
+    // Aplicação às 4 colunas (Words 0 a 3) do estado de 128 bits
     assign state_out = {
         inv_mix_one_column(state_in[127:96]), // Coluna 0
         inv_mix_one_column(state_in[95:64]),  // Coluna 1
