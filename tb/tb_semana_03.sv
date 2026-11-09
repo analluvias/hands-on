@@ -131,18 +131,18 @@ module tb_semana_03;
         assert (inv_subbytes_out == 128'hbd6e7c3df2b5779e0b61216e8b10b689)
             else begin $error("[ERRO InvSubBytes] Obtido: %h", inv_subbytes_out); error_count++; end
 
-        // FIPS-197 Ap. C.1 (Equivalent Inverse Cipher), round[1]:
-        //   InvMixColumns(is_row) = im_col
-        //   is_row = 7a9f102789d5f50b2beffd9f3dca4ea7
-        //   im_col = 4773b91ff72f354361cb018ea1e6cf2c
-        // (par verificado manualmente: byte 0 = 0e*bd^0b*6e^0d*7c^09*3d = 0x47)
-        inv_mixcolumns_in = 128'h7a9f102789d5f50b2beffd9f3dca4ea7;
+        // FIPS-197 Ap. C.1 (Inverse Cipher, Standard), round[1]:
+        //   ik_add  = e9f74eec023020f61bf2ccf2353c21c7  (apos AddRoundKey)
+        //   istart2 = 54d990a16ba09ab596bbf40ea111702f  (apos InvMixColumns)
+        // Verificacao manual do byte 0:
+        //   0e*e9 ^ 0b*f7 ^ 0d*4e ^ 09*ec
+        //     = 49 ^ fb ^ 2b ^ cd = 0x54
+        inv_mixcolumns_in = 128'he9f74eec023020f61bf2ccf2353c21c7;
         #1;
-        assert (inv_mixcolumns_out == 128'h4773b91ff72f354361cb018ea1e6cf2c)
+        assert (inv_mixcolumns_out == 128'h54d990a16ba09ab596bbf40ea111702f)
             else begin $error("[ERRO InvMixColumns] Obtido: %h", inv_mixcolumns_out); error_count++; end
 
         $display("  -> InvShiftRows / InvSubBytes / InvMixColumns: PASS");
-
 
         // ====================================================================
         // TESTE 3: Identidade algebrica InvMixColumns(MixColumns(x)) == x
