@@ -31,7 +31,7 @@ TB_FILES = \
 # ==========================================
 # Top do testbench
 # ==========================================
-TOP = minisoc_aes_key_exp_dp_tb
+TOP = minisoc_aes_key_exp_dp_tb 
 
 # ==========================================
 # Flags
@@ -71,7 +71,7 @@ syntax:
 # Compilação / Elaboração
 # ==========================================
 compile: syntax
-	vcs $(VCS_FLAGS) -top $(TOP)
+	vcs $(VCS_FLAGS) -top $(TOP) $(RTL_FILES) $(TB_FILES)
 
 # ==========================================
 # Simulação Autoverificável
