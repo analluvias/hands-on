@@ -332,8 +332,8 @@ module minisoc_aes_key_exp_dp_tb;
     // Sequência principal
     // -------------------------------------------------------------------------
     initial begin
-        $dumpfile("tb_semana_03.vcd");
-        $dumpvars(0, tb_semana_03);
+        $dumpfile("minisoc_aes_key_exp_dp_tb.vcd");
+        $dumpvars(0, minisoc_aes_key_exp_dp_tb);
 
         rst_n        = 1'b0;
         ke_start     = 1'b0;
