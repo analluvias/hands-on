@@ -1,5 +1,5 @@
 // =============================================================================
-// tb_semana_03  (module renamed to match `-top tb_semana_03`)
+// tb_semana_03  (module renamed to match `-top minisoc_aes_key_exp_dp_tb`)
 //
 // Testbench da Issue #3: minisoc_aes_key_exp + minisoc_aes_dp
 // Emula em software o contrato da Opção A:
@@ -13,7 +13,7 @@
 
 `timescale 1ns/1ps
 
-module tb_semana_03;
+module minisoc_aes_key_exp_dp_tb;
 
     // -------------------------------------------------------------------------
     // Clock / Reset
