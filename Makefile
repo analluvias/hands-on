@@ -21,10 +21,12 @@ RTL_FILES = \
     $(RTL_DIR)/minisoc_aes_inv_sbox.sv \
     $(RTL_DIR)/minisoc_aes_inv_sub_bytes.sv \
     $(RTL_DIR)/minisoc_aes_inv_shift_rows.sv \
-    $(RTL_DIR)/minisoc_aes_inv_mix_columns.sv
+    $(RTL_DIR)/minisoc_aes_inv_mix_columns.sv \
+	$(RTL_DIR)/minisoc_aes_key_exp.sv     \
+	$(RTL_DIR)/minisoc_aes_dp.sv
 
 TB_FILES = \
-    $(TB_DIR)/tb_semana_03.sv
+	$(TB_DIR)/minisoc_aes_key_exp_dp_tb.sv
 
 # ==========================================
 # Top do testbench

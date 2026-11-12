@@ -337,7 +337,7 @@ a expansão acontece **uma única vez por operação**, não por bloco. A FSM n�
 
 ---
 
-### 3.3 ST_FETCH_0..3
+### 9.4 ST_FETCH_0..3
 
 lê as 4 palavras de 32 bits do bloco atual da SRAM e monta state_in[127:0].
 
@@ -376,15 +376,23 @@ cada modo AES tem um **ponto diferente** onde o XOR acontece.
 
 ---
 
-### 3.4 ST_EXECUTE 
+### 9.5 ST_EXECUTE 
 
 executa **exatamente 10 rodadas** do datapath AES, com a round key correta em cada ciclo.
 
-**loop interno**:
-- round_cnt inicia em 0 (em ST_IDLE, quando o START é aceito).
-- A cada ciclo: state ← datapath_round(state, rk[round_cnt]) e round_cnt ← round_cnt + 1.
-- O loop **continua** enquanto round_cnt != 9 (ou seja, enquanto round_cnt < 9, o que é equivalente já que o contador só incrementa de 1 em 1).
-- Quando round_cnt == 9, executa a **10ª rodada** (que é especial: não tem MixColumns, só AddRoundKey final), registra state_out ← state, e avança para ST_STORE_0.
+´´´
+// pseudocódigo
+if (state == ST_EXECUTE) begin
+    round_idx  <= round_cnt;
+    state      <= datapath_round(state, rk[round_cnt], mode, decrypt);
+    round_cnt  <= round_cnt + 1;
+    if (round_cnt == 9) begin
+        state_out <= state_next;   // após a 10ª rodada
+        state     <= ST_STORE_0;
+        aes_mem_wr_en <= 1;
+    end
+end
+´´´
 
 **AES-128 tem 10 rodadas por definição. "decrementa de 9 até 0";**
 
@@ -397,7 +405,7 @@ o software pode escrever DECRYPT = 1 no CFB e a FSM **não vai para erro**. Ela 
 
 ---
 
-### 3.5 ST_STORE_0..3 -> Grava In-Place
+### 9.6 ST_STORE_0..3 -> Grava In-Place
 
 grava as 4 palavras de 32 bits do state_out na **mesma região** de onde foram lidas.
 
@@ -427,9 +435,9 @@ em OFB, o feedback é a **saída do Cipher** (o keystream), não o ciphertext. I
 
 ---
 
-### 3.6 ST_NEXT
+### 9.7 ST_NEXT
 
-incrementa blocks_done, avança o ponteiro da memória, e **decidi** se processa mais um bloco ou finaliza.
+incrementa blocks_done, avança o ponteiro da memória, e **decide** se processa mais um bloco ou finaliza.
 
 **O que faz em 1 ciclo**:
 - blocks_done ← blocks_done + 1
@@ -454,7 +462,7 @@ incrementa blocks_done, avança o ponteiro da memória, e **decidi** se processa
 
 ---
 
-### 3.7 ST_DONE
+### 9.8 ST_DONE
 
 sinaliza que a operação terminou com sucesso e aguardar novo START.
 
@@ -473,7 +481,7 @@ o software lê AES_STATUS periodicamente (polling). Se DONE fosse um nível comu
 
 ---
 
-### 3.8 ST_ERROR
+### 9.9 ST_ERROR
 
 sinaliza configuração inválida e aguardar novo START (reconfiguração).
 
