@@ -98,7 +98,7 @@ module minisoc_aes_key_exp_dp_tb;
     // =========================================================================
     logic [127:0] ref_cipher_c1 [0:10];
     initial begin
-        ref_cipher_c1[0]  = 128'h00102030405060708090a0b0c0d0e0f; // round[1].start
+        ref_cipher_c1[0]  = 128'h00102030405060708090a0b0c0d0e0f0; // round[1].start
         ref_cipher_c1[1]  = 128'h89d810e8855ace682d1843d8cb128fe4; // round[2].start
         ref_cipher_c1[2]  = 128'h4915598f55e5d7a0daca94fa1f0a63f7; // round[3].start
         ref_cipher_c1[3]  = 128'hfa636a2825b339c940668a3157244d17; // round[4].start
