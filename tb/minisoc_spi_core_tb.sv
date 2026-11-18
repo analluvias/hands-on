@@ -1,254 +1,210 @@
-// =============================================================================
-// minisoc_spi_core.sv
-//
-// Back-end do SPI no domínio clk (always-on).
-//
-// Responsabilidades:
-//   1. Sincronizar frame_valid_toggle (spi_sclk -> clk) via 2FF + edge detect.
-//   2. No edge detect: decodificar frame_data (quasi-estático) e efetivar
-//      leitura/escrita no register bank.
-//   3. Gerar cmd_start (pulso 1 ciclo) quando AES_CONTROL.START=1 for escrito.
-//   4. Latchear read_data para o MISO (consumido pela Issue 4).
-//
-// IMPORTANTE (fix da Issue 3):
-//   O decode usa frame_data[39:0] DIRETAMENTE, sem registrar em frame_capture.
-//   frame_data é quasi-estático (§4.1): o RX o atualiza junto com
-//   frame_valid_toggle no mesmo posedge spi_sclk; o 2FF de sync garante
-//   2-3 ciclos de estabilidade antes de frame_pulse. Registrar frame_data
-//   em um FF e ler esse FF no MESMO edge causaria leitura do valor anterior
-//   (bug de 1 frame de atraso).
-//
-// Interface com o RX (Issue 2):
-//   - frame_data[39:0]: quasi-estático enquanto toggle está estável.
-//   - frame_valid_toggle: alterna 1x por frame completo.
-//
-// Layout dos registradores de controle (Block Guide §6.1/§6.3):
-//
-//   AES_CONTROL (0x0B):
-//     [0]    START (write-one-pulse; leitura retorna 0)
-//     [1]    DECRYPT
-//     [4:2]  MODE (000=ECB..101=CTR; 110/111 reservados -> ERROR na FSM)
-//
-//   SYSTEM_CONTROL (0x0E):
-//     [0]    MEM_SEL_AES
-//     [1]    PLL_ENABLE
-//     [3:2]  PLL_DIV_SEL (00=÷1, 01=÷2, 10=÷4, 11=÷8)
-//
-//   AES_STATUS (0x0C, RO):
-//     [0]    BUSY
-//     [1]    DONE
-//     [2]    ERROR
-//     [11:3] BLOCKS_DONE[8:0]
-//
-//   SYSTEM_STATUS (0x0F, RO):
-//     [0]    PLL_LOCKED
-//
-//   VERSION (0x0D, RO): 32'h0000_0001
-//
-//   NOP (0x3F): leitura mantém read_data_q; escrita é ignorada.
-// =============================================================================
+`timescale 1ns/1ps
 
-module minisoc_spi_core (
-    input  logic         clk,
-    input  logic         rst_n,
+module minisoc_spi_core_tb;
 
-    // --- Interface com minisoc_spi_rx (domínio spi_sclk) --------------------
-    input  logic [39:0]  frame_data,
-    input  logic         frame_valid_toggle,
+    logic         clk;
+    logic         rst_n;
+    logic [39:0]  frame_data;
+    logic         frame_valid_toggle;
+    logic         status_busy;
+    logic         status_done;
+    logic         status_error;
+    logic [8:0]   status_blocks_done;
+    logic         pll_locked;
+    logic [127:0] cfg_key;
+    logic [127:0] cfg_iv;
+    logic [63:0]  cfg_counter;
+    logic [8:0]   cfg_num_blocks;
+    logic [2:0]   cfg_mode;
+    logic         cfg_decrypt;
+    logic         cmd_start;
+    logic [31:0]  read_data;
 
-    // --- Status externos (AES engine + PLL) ---------------------------------
-    input  logic         status_busy,
-    input  logic         status_done,
-    input  logic         status_error,
-    input  logic [8:0]   status_blocks_done,
-    input  logic         pll_locked,
+    minisoc_spi_core dut (
+        .clk                 (clk),
+        .rst_n               (rst_n),
+        .frame_data          (frame_data),
+        .frame_valid_toggle  (frame_valid_toggle),
+        .status_busy         (status_busy),
+        .status_done         (status_done),
+        .status_error        (status_error),
+        .status_blocks_done  (status_blocks_done),
+        .pll_locked          (pll_locked),
+        .cfg_key             (cfg_key),
+        .cfg_iv              (cfg_iv),
+        .cfg_counter         (cfg_counter),
+        .cfg_num_blocks      (cfg_num_blocks),
+        .cfg_mode            (cfg_mode),
+        .cfg_decrypt         (cfg_decrypt),
+        .cmd_start           (cmd_start),
+        .read_data           (read_data)
+    );
 
-    // --- Config para o AES engine ------------------------------------------
-    output logic [127:0] cfg_key,
-    output logic [127:0] cfg_iv,
-    output logic [63:0]  cfg_counter,
-    output logic [8:0]   cfg_num_blocks,
-    output logic [2:0]   cfg_mode,
-    output logic         cfg_decrypt,
-    output logic         cmd_start,
+    initial clk = 1'b0;
+    always #5 clk = ~clk;
 
-    // --- Para o MISO TX (Issue 4) ------------------------------------------
-    output logic [31:0]  read_data
-);
+    // ---- Monitor de pulsos de cmd_start ------------------------------------
+    integer cmd_start_pulses = 0;
+    always @(posedge clk) if (cmd_start) cmd_start_pulses++;
 
-    // =========================================================================
-    // 1. CDC: sincronizador 2FF + edge detector
-    // =========================================================================
-    (* async_reg = "true" *) logic ff1, ff2;
-    logic ff3;
-
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            ff1 <= 1'b0;
-            ff2 <= 1'b0;
-            ff3 <= 1'b0;
+    // ---- Helpers -----------------------------------------------------------
+    integer errors = 0;
+    task automatic check(input string msg, input logic cond);
+        if (!cond) begin
+            $display("FAIL: %s", msg);
+            errors++;
         end else begin
-            ff1 <= frame_valid_toggle;
-            ff2 <= ff1;
-            ff3 <= ff2;
+            $display("PASS: %s", msg);
         end
+    endtask
+
+    // send_write/send_read COM o #1 (evita corrida toggle x always_ff)
+    task automatic send_write(input logic [5:0] addr, input logic [31:0] data);
+        frame_data = {1'b0, addr, 1'b0, data};
+        @(posedge clk);
+        #1;
+        frame_valid_toggle = ~frame_valid_toggle;
+        repeat (6) @(posedge clk);
+    endtask
+
+    task automatic send_read(input logic [5:0] addr);
+        frame_data = {1'b1, addr, 1'b0, 32'd0};
+        @(posedge clk);
+        #1;
+        frame_valid_toggle = ~frame_valid_toggle;
+        repeat (6) @(posedge clk);
+    endtask
+
+    // ---- Testes ------------------------------------------------------------
+    initial begin
+        $fsdbDumpfile("spi_core.fsdb");
+        $fsdbDumpvars(0, minisoc_spi_core_tb, "+all");
+
+        rst_n              = 1'b0;
+        frame_data         = 40'd0;
+        frame_valid_toggle = 1'b0;
+        status_busy        = 1'b0;
+        status_done        = 1'b0;
+        status_error       = 1'b0;
+        status_blocks_done = 9'd0;
+        pll_locked         = 1'b0;
+
+        repeat (5) @(posedge clk);
+        rst_n = 1'b1;
+        repeat (3) @(posedge clk);
+
+        // T1: KEY0..3
+        send_write(6'h00, 32'h11223344);
+        send_write(6'h01, 32'h55667788);
+        send_write(6'h02, 32'h99AABBCC);
+        send_write(6'h03, 32'hDDEEFF00);
+        check("T1: cfg_key", cfg_key == 128'h112233445566778899AABBCCDDEEFF00);
+
+        // T2: IV0..3
+        send_write(6'h04, 32'hAABBCCDD);
+        send_write(6'h05, 32'hEEFF0011);
+        send_write(6'h06, 32'h22334455);
+        send_write(6'h07, 32'h66778899);
+        check("T2: cfg_iv", cfg_iv == 128'hAABBCCDDEEFF00112233445566778899);
+
+        // T3: COUNTER_HI/LO
+        send_write(6'h08, 32'hDEADBEEF);
+        send_write(6'h09, 32'hCAFEBABE);
+        check("T3: cfg_counter", cfg_counter == 64'hDEADBEEFCAFEBABE);
+
+        // T4: NUM_BLOCKS
+        send_write(6'h0A, 32'd100);
+        check("T4: cfg_num_blocks=100", cfg_num_blocks == 9'd100);
+        send_write(6'h0A, 32'd256);
+        check("T4b: cfg_num_blocks=256", cfg_num_blocks == 9'd256);
+
+        // T5: AES_CONTROL (sem START) -> modo=5, decrypt=1
+        send_write(6'h0B, 32'h16);
+        check("T5: cfg_decrypt=1", cfg_decrypt == 1'b1);
+        check("T5: cfg_mode=5",    cfg_mode    == 3'd5);
+
+        // T6: START=1 escrito -> cmd_start pulsa 1x
+        cmd_start_pulses = 0;
+        send_write(6'h0B, 32'h17);
+        check("T6: cmd_start pulsou 1x", cmd_start_pulses == 1);
+        check("T6: cfg_mode mantido 5",  cfg_mode    == 3'd5);
+        check("T6: cfg_decrypt mantido 1", cfg_decrypt == 1'b1);
+
+        // T6b: START=0 escrito -> sem pulso
+        cmd_start_pulses = 0;
+        send_write(6'h0B, 32'h04);
+        check("T6b: sem pulso de cmd_start", cmd_start_pulses == 0);
+        check("T6b: cfg_mode=1", cfg_mode == 3'd1);
+        check("T6b: cfg_decrypt=0", cfg_decrypt == 1'b0);
+
+        // T7: SYSTEM_CONTROL write -> read back
+        send_write(6'h0E, 32'h0B);
+        send_read (6'h0E);
+        check("T7: SYSTEM_CONTROL readback MEM_SEL_AES",
+              read_data[0] == 1'b1);
+        check("T7: SYSTEM_CONTROL readback PLL_ENABLE",
+              read_data[1] == 1'b1);
+        check("T7: SYSTEM_CONTROL readback PLL_DIV_SEL",
+              read_data[3:2] == 2'b10);
+
+        // T8: KEY readback
+        send_read(6'h00);
+        check("T8: read KEY0", read_data == 32'h11223344);
+        send_read(6'h03);
+        check("T8: read KEY3", read_data == 32'hDDEEFF00);
+        send_read(6'h0A);
+        check("T8: read NUM_BLOCKS", read_data == 32'd256);
+
+        // T9: VERSION = 0x00000001
+        send_read(6'h0D);
+        check("T9: VERSION=0x00000001", read_data == 32'h0000_0001);
+
+        // T10: write em VERSION nao altera
+        send_write(6'h0D, 32'hDEADBEEF);
+        send_read (6'h0D);
+        check("T10: VERSION imutavel", read_data == 32'h0000_0001);
+
+        // T11: AES_STATUS leitura
+        status_busy        = 1'b1;
+        status_done        = 1'b0;
+        status_error       = 1'b0;
+        status_blocks_done = 9'd42;
+        send_read(6'h0C);
+        check("T11: STATUS.BUSY",        read_data[0]     == 1'b1);
+        check("T11: STATUS.DONE",        read_data[1]     == 1'b0);
+        check("T11: STATUS.ERROR",       read_data[2]     == 1'b0);
+        check("T11: STATUS.BLOCKS_DONE", read_data[11:3]  == 9'd42);
+
+        // T12: SYSTEM_STATUS leitura (PLL_LOCKED)
+        pll_locked = 1'b1;
+        send_read(6'h0F);
+        check("T12: SYSTEM_STATUS.PLL_LOCKED=1", read_data[0] == 1'b1);
+
+        // T13: AES_STATUS eh RO
+        status_busy        = 1'b0;
+        status_done        = 1'b1;
+        status_error       = 1'b1;
+        status_blocks_done = 9'd7;
+        send_write(6'h0C, 32'hFFFFFFFF);
+        send_read (6'h0C);
+        check("T13: STATUS.BUSY inalterado",        read_data[0]    == 1'b0);
+        check("T13: STATUS.DONE inalterado",        read_data[1]    == 1'b1);
+        check("T13: STATUS.ERROR inalterado",       read_data[2]    == 1'b1);
+        check("T13: STATUS.BLOCKS_DONE inalterado", read_data[11:3] == 9'd7);
+
+        // T14: SYSTEM_STATUS eh RO
+        send_write(6'h0F, 32'hFFFFFFFF);
+        send_read (6'h0F);
+        check("T14: SYSTEM_STATUS.PLL_LOCKED inalterado", read_data[0] == 1'b1);
+
+        if (errors == 0) $display("=== ALL TESTS PASSED ===");
+        else             $display("=== %0d ERRORS ===", errors);
+        $finish;
     end
 
-    // Pulso de 1 ciclo em clk: detecta alternância do toggle.
-    wire frame_pulse = ff2 ^ ff3;
-
-    // =========================================================================
-    // 2. Decode — usa frame_data DIRETAMENTE (quasi-estático)
-    //
-    //    Fix: NÃO registrar em frame_capture e ler do registrador no mesmo
-    //    edge, senão o valor é o do frame anterior (bug de 1 frame).
-    // =========================================================================
-    wire        rwb   = frame_data[39];
-    wire [5:0]  addr  = frame_data[38:33];
-    // wire     rsv = frame_data[32];  // RSV ignorado (já mascarado no RX)
-    wire [31:0] wdata = frame_data[31:0];
-
-    // =========================================================================
-    // 3. Register bank (R/W)
-    // =========================================================================
-    logic [127:0] key_q;
-    logic [127:0] iv_q;
-    logic [63:0]  counter_q;
-    logic [8:0]   num_blocks_q;
-    logic         decrypt_q;
-    logic [2:0]   mode_q;
-    logic         mem_sel_aes_q;
-    logic         pll_enable_q;
-    logic [1:0]   pll_div_sel_q;
-
-    localparam logic [5:0] ADDR_KEY0       = 6'h00;
-    localparam logic [5:0] ADDR_KEY1       = 6'h01;
-    localparam logic [5:0] ADDR_KEY2       = 6'h02;
-    localparam logic [5:0] ADDR_KEY3       = 6'h03;
-    localparam logic [5:0] ADDR_IV0        = 6'h04;
-    localparam logic [5:0] ADDR_IV1        = 6'h05;
-    localparam logic [5:0] ADDR_IV2        = 6'h06;
-    localparam logic [5:0] ADDR_IV3        = 6'h07;
-    localparam logic [5:0] ADDR_CTR_HI     = 6'h08;
-    localparam logic [5:0] ADDR_CTR_LO     = 6'h09;
-    localparam logic [5:0] ADDR_NUM_BLOCKS = 6'h0A;
-    localparam logic [5:0] ADDR_AES_CTRL   = 6'h0B;
-    localparam logic [5:0] ADDR_AES_STAT   = 6'h0C;
-    localparam logic [5:0] ADDR_VERSION    = 6'h0D;
-    localparam logic [5:0] ADDR_SYS_CTRL   = 6'h0E;
-    localparam logic [5:0] ADDR_SYS_STAT   = 6'h0F;
-
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            key_q         <= 128'd0;
-            iv_q          <= 128'd0;
-            counter_q     <= 64'd0;
-            num_blocks_q  <= 9'd0;
-            decrypt_q     <= 1'b0;
-            mode_q        <= 3'd0;
-            mem_sel_aes_q <= 1'b0;
-            pll_enable_q  <= 1'b0;
-            pll_div_sel_q <= 2'd0;
-        end else if (frame_pulse && !rwb) begin
-            case (addr)
-                ADDR_KEY0:       key_q[127:96]    <= wdata;
-                ADDR_KEY1:       key_q[95:64]     <= wdata;
-                ADDR_KEY2:       key_q[63:32]     <= wdata;
-                ADDR_KEY3:       key_q[31:0]      <= wdata;
-                ADDR_IV0:        iv_q[127:96]     <= wdata;
-                ADDR_IV1:        iv_q[95:64]      <= wdata;
-                ADDR_IV2:        iv_q[63:32]      <= wdata;
-                ADDR_IV3:        iv_q[31:0]       <= wdata;
-                ADDR_CTR_HI:     counter_q[63:32] <= wdata;
-                ADDR_CTR_LO:     counter_q[31:0]  <= wdata;
-                ADDR_NUM_BLOCKS: num_blocks_q     <= wdata[8:0];
-                ADDR_AES_CTRL: begin
-                    decrypt_q <= wdata[1];
-                    mode_q    <= wdata[4:2];
-                    // wdata[0] (START) NÃO armazena - gera cmd_start
-                end
-                ADDR_SYS_CTRL: begin
-                    mem_sel_aes_q <= wdata[0];
-                    pll_enable_q  <= wdata[1];
-                    pll_div_sel_q <= wdata[3:2];
-                end
-                // RO (AES_STAT, VERSION, SYS_STAT) e NOP: no-op
-                default: ;
-            endcase
-        end
+    initial begin
+        #1_000_000;
+        $fatal(1, "TIMEOUT");
     end
-
-    // =========================================================================
-    // 4. cmd_start: pulso de 1 ciclo quando START=1 é escrito em AES_CONTROL
-    // =========================================================================
-    logic cmd_start_q;
-
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            cmd_start_q <= 1'b0;
-        end else begin
-            cmd_start_q <= 1'b0;
-            if (frame_pulse && !rwb && (addr == ADDR_AES_CTRL) && wdata[0])
-                cmd_start_q <= 1'b1;
-        end
-    end
-
-    assign cmd_start = cmd_start_q;
-
-    // =========================================================================
-    // 5. Leitura
-    //
-    //   - RWb=1 e endereço mapeado → latcheia read_data_q.
-    //   - RWb=1 e NOP (0x3F) → mantém valor anterior.
-    //   - RWb=0 → não mexe em read_data_q.
-    // =========================================================================
-    logic [31:0] read_data_q;
-
-    wire [31:0] aes_status_word = {
-        20'd0,
-        status_blocks_done,   // [11:3]
-        status_error,         // [2]
-        status_done,          // [1]
-        status_busy           // [0]
-    };
-
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            read_data_q <= 32'd0;
-        end else if (frame_pulse && rwb) begin
-            case (addr)
-                ADDR_KEY0:       read_data_q <= key_q[127:96];
-                ADDR_KEY1:       read_data_q <= key_q[95:64];
-                ADDR_KEY2:       read_data_q <= key_q[63:32];
-                ADDR_KEY3:       read_data_q <= key_q[31:0];
-                ADDR_IV0:        read_data_q <= iv_q[127:96];
-                ADDR_IV1:        read_data_q <= iv_q[95:64];
-                ADDR_IV2:        read_data_q <= iv_q[63:32];
-                ADDR_IV3:        read_data_q <= iv_q[31:0];
-                ADDR_CTR_HI:     read_data_q <= counter_q[63:32];
-                ADDR_CTR_LO:     read_data_q <= counter_q[31:0];
-                ADDR_NUM_BLOCKS: read_data_q <= {23'd0, num_blocks_q};
-                ADDR_AES_CTRL:   read_data_q <= {27'd0, mode_q, decrypt_q, 1'b0};
-                ADDR_AES_STAT:   read_data_q <= aes_status_word;
-                ADDR_VERSION:    read_data_q <= 32'h0000_0001;
-                ADDR_SYS_CTRL:   read_data_q <= {28'd0, pll_div_sel_q, pll_enable_q, mem_sel_aes_q};
-                ADDR_SYS_STAT:   read_data_q <= {31'd0, pll_locked};
-                // NOP (0x3F) e demais: mantém valor anterior
-                default: ;
-            endcase
-        end
-    end
-
-    assign read_data = read_data_q;
-
-    // =========================================================================
-    // 6. Saídas de configuração
-    // =========================================================================
-    assign cfg_key        = key_q;
-    assign cfg_iv         = iv_q;
-    assign cfg_counter    = counter_q;
-    assign cfg_num_blocks = num_blocks_q;
-    assign cfg_mode       = mode_q;
-    assign cfg_decrypt    = decrypt_q;
 
 endmodule
