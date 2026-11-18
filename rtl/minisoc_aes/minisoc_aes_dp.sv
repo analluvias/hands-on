@@ -1,5 +1,5 @@
 // =============================================================================
-// minisoc_aes_dp.sv
+// minisoc_aes_dp.sv -> DATAPATH : DECISÕES DO QUE VAI ACONTECER NA RODADA -> POIS RDADA FINAL EH DIFERENTE
 //
 // AES-128 datapath — uma rodada por ciclo, Cipher + InvCipher.
 // Conforme Issue #2 e Microarquitetura v1.2 8.1 / 9.5 / 2 (Opção A).

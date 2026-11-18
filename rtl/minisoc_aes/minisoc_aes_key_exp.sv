@@ -39,7 +39,7 @@ module minisoc_aes_key_exp (
     input  logic          clk,        // sys_clk
     input  logic          rst_n,      // sys_rst_n (ativo baixo, assíncrono)
     input  logic          start,      // pulso de 1 ciclo
-    input  logic [127:0]  key_in,     // cfg_key
+    input  logic [127:0]  key_in,     // cfg_key -> computado combinacionalmente durante o próprio ciclo de start a partir de key_in (em vez de esperar w_prev ser carregado primeiro). 
     input  logic [3:0]    round_idx,  // 0..10 (selecionado pela FSM)
     output logic [127:0]  round_key,  // rk[round_idx] (combinacional)
     output logic          ready       // 1 quando rk_bank[0..10] válidos
