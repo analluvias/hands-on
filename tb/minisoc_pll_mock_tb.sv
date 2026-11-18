@@ -25,12 +25,28 @@ module minisoc_pll_mock_tb;
         .sys_clk     (sys_clk)
     );
 
-    // Monitor de bordas em sys_clk (ignora X)
-    int sys_edges = 0;
-    always @(sys_clk) if (!$isunknown(sys_clk)) sys_edges++;
+    // -------------------------------------------------------------------------
+    // Monitor de bordas em sys_clk
+    // Rastreia o valor anterior para não contar a transição X -> 0 em t=0,
+    // nem transições de/para X durante reset.
+    // -------------------------------------------------------------------------
+    integer sys_edges    = 0;
+    logic   sys_clk_prev = 1'b0;
 
-    int errors = 0;
-    task automatic expect(input string msg, input logic cond);
+    always @(sys_clk) begin
+        if ((sys_clk      === 1'b0 || sys_clk      === 1'b1) &&
+            (sys_clk_prev === 1'b0 || sys_clk_prev === 1'b1) &&
+            (sys_clk !== sys_clk_prev))
+            sys_edges++;
+        sys_clk_prev = sys_clk;
+    end
+
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+    integer errors = 0;
+
+    task automatic check(input string msg, input logic cond);
         if (!cond) begin
             $display("FAIL: %s", msg);
             errors++;
@@ -56,10 +72,24 @@ module minisoc_pll_mock_tb;
         pll_enable = 1'b1;
     endtask
 
+    // -------------------------------------------------------------------------
+    // check_divisor com timeout diagnóstico:
+    //   se pll_locked não subir em CLK_PERIOD*64, aborta dizendo qual divisor.
+    // -------------------------------------------------------------------------
     task automatic check_divisor(input logic [1:0] sel, input int div);
         time period, expected;
         reset_and_enable(sel);
-        wait (pll_locked);
+
+        fork : wait_lock
+            wait (pll_locked);
+            begin
+                #(CLK_PERIOD * 64);
+                $fatal(1, "TIMEOUT em check_divisor: pll_locked nao subiu (sel=%0d)",
+                       sel);
+            end
+        join_any
+        disable wait_lock;
+
         @(posedge sys_clk);
         measure_period(period);
         expected = CLK_PERIOD * div;
@@ -72,10 +102,18 @@ module minisoc_pll_mock_tb;
         end
     endtask
 
+    // -------------------------------------------------------------------------
+    // Corpo do teste
+    // -------------------------------------------------------------------------
     initial begin
 
+        // Waveform: use FSDB (Verdi) OU VCD (GTKWave).
+        // Se o VCS reclamar "Unresolved system task: $fsdbDumpfile",
+        // comente as 2 linhas FSDB e descomente as 2 linhas VCD.
         $fsdbDumpfile("pll.fsdb");
         $fsdbDumpvars(0, minisoc_pll_mock_tb, "+all");
+        // $dumpfile("pll.vcd");
+        // $dumpvars(0, minisoc_pll_mock_tb);
 
         rst_n       = 1'b0;
         pll_enable  = 1'b0;
@@ -83,19 +121,19 @@ module minisoc_pll_mock_tb;
 
         // T1: sys_clk silencioso antes de pll_enable
         repeat (8) @(posedge clk);
-        expect("sys_clk silencioso antes de pll_enable", sys_edges == 0);
+        check("sys_clk silencioso antes de pll_enable", sys_edges == 0);
 
         // T2: enable sem lock -> sys_clk continua em 0
         rst_n      = 1'b1;
         pll_enable = 1'b1;
         repeat (4) @(posedge clk);   // < LOCK_CYCLES
-        expect("pll_locked=0 antes de LOCK_CYCLES", !pll_locked);
-        expect("sys_clk silencioso antes de locked", sys_edges == 0);
+        check("pll_locked=0 antes de LOCK_CYCLES", !pll_locked);
+        check("sys_clk silencioso antes de locked", sys_edges == 0);
 
         // T3: após lock, sys_clk oscila
         wait (pll_locked);
         @(posedge sys_clk); @(posedge sys_clk);
-        expect("sys_clk oscila após lock", sys_edges >= 2);
+        check("sys_clk oscila após lock", sys_edges >= 2);
 
         // T4: os 4 divisores
         check_divisor(2'b00, 1);
@@ -109,19 +147,21 @@ module minisoc_pll_mock_tb;
         @(posedge sys_clk);
         pll_enable = 1'b0;
         repeat (4) @(posedge clk);
-        expect("pll_locked=0 após disable", !pll_locked);
+        check("pll_locked=0 após disable", !pll_locked);
         sys_edges = 0;
+        sys_clk_prev = sys_clk;
         repeat (8) @(posedge clk);
-        expect("sys_clk silencioso após disable", sys_edges == 0);
+        check("sys_clk silencioso após disable", sys_edges == 0);
 
         if (errors == 0) $display("=== ALL TESTS PASSED ===");
         else             $display("=== %0d ERRORS ===", errors);
         $finish;
     end
 
+    // Guard global de 1 us
     initial begin
-        #1_000_000; // 1 us guard
-        $fatal(1, "TIMEOUT");
+        #1_000_000;
+        $fatal(1, "TIMEOUT global (1 us)");
     end
 
 endmodule
