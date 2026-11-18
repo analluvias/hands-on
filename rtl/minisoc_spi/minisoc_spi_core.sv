@@ -3,70 +3,43 @@
 //
 // Back-end do SPI no domínio clk (always-on).
 //
-// Responsabilidades:
-//   1. Sincronizar frame_valid_toggle (spi_sclk -> clk) via 2FF + edge detect.
-//   2. Capturar frame_data (quasi-estático) no edge do toggle.
-//   3. Decodificar RWb / ADDR[5:0] / DATA[31:0].
-//   4. Efetivar leitura ou escrita no register bank (Block Guide §6).
-//   5. Gerar cmd_start (pulso 1 ciclo) quando AES_CONTROL.START=1 for escrito.
-//   6. Latchear read_data para o MISO (consumido pela Issue 4).
+// FIX IMPORTANTE (Issues 3):
+//   Não existe registrador `frame_capture` intermediário. O decode usa
+//   frame_data[39:0] DIRETAMENTE. frame_data é quasi-estático (§4.1): o RX
+//   o atualiza junto com frame_valid_toggle no mesmo posedge spi_sclk, e o
+//   2FF sync garante 2-3 ciclos de estabilidade antes de frame_pulse.
+//   Registrar frame_data e ler o registrador no MESMO edge causaria leitura
+//   do valor anterior (bug de 1 frame de atraso).
 //
 // Interface com o RX (Issue 2):
 //   - frame_data[39:0]: quasi-estático enquanto toggle está estável.
 //   - frame_valid_toggle: alterna 1x por frame completo.
 //
 // Layout dos registradores de controle (Block Guide §6.1/§6.3):
-//
-//   AES_CONTROL (0x0B):
-//     [0]    START (write-one-pulse; leitura retorna 0)
-//     [1]    DECRYPT
-//     [4:2]  MODE (000=ECB..101=CTR; 110/111 reservados -> ERROR na FSM)
-//
-//   SYSTEM_CONTROL (0x0E):
-//     [0]    MEM_SEL_AES
-//     [1]    PLL_ENABLE
-//     [3:2]  PLL_DIV_SEL (00=÷1, 01=÷2, 10=÷4, 11=÷8)
-//
-//   AES_STATUS (0x0C, RO):
-//     [0]    BUSY
-//     [1]    DONE
-//     [2]    ERROR
-//     [11:3] BLOCKS_DONE[8:0]
-//
-//   SYSTEM_STATUS (0x0F, RO):
-//     [0]    PLL_LOCKED
-//
+//   AES_CONTROL (0x0B): [0]=START (W1P), [1]=DECRYPT, [4:2]=MODE
+//   SYSTEM_CONTROL (0x0E): [0]=MEM_SEL_AES, [1]=PLL_ENABLE, [3:2]=PLL_DIV_SEL
+//   AES_STATUS (0x0C, RO): [0]=BUSY, [1]=DONE, [2]=ERROR, [11:3]=BLOCKS_DONE
+//   SYSTEM_STATUS (0x0F, RO): [0]=PLL_LOCKED
 //   VERSION (0x0D, RO): 32'h0000_0001
-//
-//   NOP (0x3F): leitura mantém read_data_q; escrita é ignorada.
-//
-// Reset:
-//   - rst_n: assíncrono, ativo baixo (reset global do sistema).
-//   - Todos os registradores R/W zeram em reset.
-//   - frame_data e read_data_q zeram em reset.
-//
-// Escopo (Issue 3):
-//   - CDC, decode, register bank.
-//   - NÃO integra com AES engine (status_* são inputs; cfg_* são outputs).
-//   - NÃO integra com MISO TX (read_data é output; consumo é Issue 4).
+//   NOP (0x3F): leitura mantém read_data_q; escrita ignorada.
 // =============================================================================
 
 module minisoc_spi_core (
     input  logic         clk,
     input  logic         rst_n,
 
-    // --- Interface com minisoc_spi_rx (domínio spi_sclk) --------------------
+    // RX (domínio spi_sclk)
     input  logic [39:0]  frame_data,
     input  logic         frame_valid_toggle,
 
-    // --- Status externos (AES engine + PLL) ---------------------------------
+    // Status externos
     input  logic         status_busy,
     input  logic         status_done,
     input  logic         status_error,
     input  logic [8:0]   status_blocks_done,
     input  logic         pll_locked,
 
-    // --- Config para o AES engine ------------------------------------------
+    // Config para o AES engine
     output logic [127:0] cfg_key,
     output logic [127:0] cfg_iv,
     output logic [63:0]  cfg_counter,
@@ -75,14 +48,15 @@ module minisoc_spi_core (
     output logic         cfg_decrypt,
     output logic         cmd_start,
 
-    // --- Para o MISO TX (Issue 4) ------------------------------------------
+    // Para o MISO TX (Issue 4)
     output logic [31:0]  read_data
 );
 
     // =========================================================================
-    // 1. CDC: sincronizador 2FF + edge detector
+    // 1. CDC: 2FF + edge detect
     // =========================================================================
-    logic ff1, ff2, ff3;
+    (* async_reg = "true" *) logic ff1, ff2;
+    logic ff3;
 
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -96,32 +70,17 @@ module minisoc_spi_core (
         end
     end
 
-    // Pulso de 1 ciclo em clk: detecta alternância do toggle.
     wire frame_pulse = ff2 ^ ff3;
 
     // =========================================================================
-    // 2. Captura do frame (quasi-estático; estável desde antes do toggle)
+    // 2. Decode: frame_data DIRETO (quasi-estático)
     // =========================================================================
-    logic [39:0] frame_capture;
-
-    always_ff @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            frame_capture <= 40'd0;
-        end else if (frame_pulse) begin
-            frame_capture <= frame_data;
-        end
-    end
+    wire        rwb   = frame_data[39];
+    wire [5:0]  addr  = frame_data[38:33];
+    wire [31:0] wdata = frame_data[31:0];
 
     // =========================================================================
-    // 3. Decode
-    // =========================================================================
-    wire        rwb   = frame_capture[39];
-    wire [5:0]  addr  = frame_capture[38:33];
-    // wire     rsv = frame_capture[32];  // RSV ignorado (já mascarado no RX)
-    wire [31:0] wdata = frame_capture[31:0];
-
-    // =========================================================================
-    // 4. Register bank (R/W)
+    // 3. Register bank
     // =========================================================================
     logic [127:0] key_q;
     logic [127:0] iv_q;
@@ -133,7 +92,6 @@ module minisoc_spi_core (
     logic         pll_enable_q;
     logic [1:0]   pll_div_sel_q;
 
-    // Endereços
     localparam logic [5:0] ADDR_KEY0       = 6'h00;
     localparam logic [5:0] ADDR_KEY1       = 6'h01;
     localparam logic [5:0] ADDR_KEY2       = 6'h02;
@@ -178,21 +136,20 @@ module minisoc_spi_core (
                 ADDR_AES_CTRL: begin
                     decrypt_q <= wdata[1];
                     mode_q    <= wdata[4:2];
-                    // wdata[0] (START) NÃO é armazenado - gera cmd_start
+                    // wdata[0] (START) NÃO armazena - gera cmd_start
                 end
                 ADDR_SYS_CTRL: begin
                     mem_sel_aes_q <= wdata[0];
                     pll_enable_q  <= wdata[1];
                     pll_div_sel_q <= wdata[3:2];
                 end
-                // ADDR_AES_STAT, ADDR_VERSION, ADDR_SYS_STAT, NOP: no-op
                 default: ;
             endcase
         end
     end
 
     // =========================================================================
-    // 5. cmd_start: pulso de 1 ciclo quando START=1 é escrito em AES_CONTROL
+    // 4. cmd_start: pulso 1 ciclo quando START=1 é escrito em AES_CONTROL
     // =========================================================================
     logic cmd_start_q;
 
@@ -209,15 +166,10 @@ module minisoc_spi_core (
     assign cmd_start = cmd_start_q;
 
     // =========================================================================
-    // 6. Leitura
-    //
-    //   - RWb=1 e endereço mapeado → latcheia read_data_q.
-    //   - RWb=1 e NOP (0x3F) → mantém valor anterior (MISO shifta o latcheado).
-    //   - RWb=0 → não mexe em read_data_q.
+    // 5. Leitura
     // =========================================================================
     logic [31:0] read_data_q;
 
-    // Composição de status para leitura
     wire [31:0] aes_status_word = {
         20'd0,
         status_blocks_done,   // [11:3]
@@ -247,7 +199,6 @@ module minisoc_spi_core (
                 ADDR_VERSION:    read_data_q <= 32'h0000_0001;
                 ADDR_SYS_CTRL:   read_data_q <= {28'd0, pll_div_sel_q, pll_enable_q, mem_sel_aes_q};
                 ADDR_SYS_STAT:   read_data_q <= {31'd0, pll_locked};
-                // NOP (0x3F) e demais: mantém valor anterior
                 default: ;
             endcase
         end
@@ -256,7 +207,7 @@ module minisoc_spi_core (
     assign read_data = read_data_q;
 
     // =========================================================================
-    // 7. Saídas de configuração
+    // 6. Saídas
     // =========================================================================
     assign cfg_key        = key_q;
     assign cfg_iv         = iv_q;
@@ -264,9 +215,5 @@ module minisoc_spi_core (
     assign cfg_num_blocks = num_blocks_q;
     assign cfg_mode       = mode_q;
     assign cfg_decrypt    = decrypt_q;
-
-    // mem_sel_aes_q, pll_enable_q, pll_div_sel_q ficam disponíveis internamente
-    // via leitura de SYSTEM_CONTROL (0x0E). Se a integração com o top-level
-    // (Issue 5) precisar expô-las, adicionar portas aqui.
 
 endmodule
