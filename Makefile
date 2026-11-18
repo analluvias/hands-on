@@ -36,6 +36,16 @@ PLL_FILES = $(PLL_DIR)/minisoc_pll_mock.sv
 PLL_TB    = $(TB_DIR)/minisoc_pll_mock_tb.sv
 PLL_TOP   = minisoc_pll_mock_tb
 
+
+# ==========================================
+# SPI RX (Semana 5, Issue 2)
+# ==========================================
+SPI_DIR      = rtl/minisoc_spi
+SPI_RX_FILES = $(SPI_DIR)/minisoc_spi_rx.sv
+SPI_RX_TB    = $(TB_DIR)/minisoc_spi_rx_tb.sv
+SPI_RX_TOP   = minisoc_spi_rx_tb
+
+
 # ==========================================
 # Flags
 # ==========================================
@@ -94,6 +104,24 @@ wave:
 pll_wave:
 	verdi -ssf pll.fsdb &
 
+
+#============================================
+#             SPI RX
+#============================================
+spi_rx_lint:
+	@echo "=== Lint SPI RX ==="
+	vlogan $(VLOGAN_FLAGS) $(SPI_RX_FILES)
+
+spi_rx_compile:
+	vlogan -full64 -sverilog -kdb -timescale=$(TIMESCALE) \
+		$(SPI_RX_FILES) $(SPI_RX_TB)
+	vcs $(VCS_FLAGS) -top $(SPI_RX_TOP) -o simv_spi_rx \
+		$(SPI_RX_FILES) $(SPI_RX_TB)
+
+spi_rx_run: spi_rx_compile
+	./simv_spi_rx
+
+
 # ==========================================
 # Clean
 # ==========================================
@@ -104,4 +132,5 @@ clean: clean_sim
 
 .PHONY: lint syntax compile run \
         pll_lint pll_syntax pll_compile pll_run \
+        spi_rx_lint spi_rx_compile spi_rx_run \
         wave pll_wave clean clean_sim
