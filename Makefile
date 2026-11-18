@@ -45,7 +45,7 @@ VLOGAN_FLAGS = -full64 \
                -sverilog \
                -kdb \
                -timescale=$(TIMESCALE) \
-               +lint=all,noVCDE
+               +lint=all,noVCDE,noNS
 
 VCS_FLAGS = -full64 \
             -sverilog \
