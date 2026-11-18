@@ -2,6 +2,7 @@
 # Diretórios
 # ==========================================
 RTL_DIR     = rtl/minisoc_aes
+PLL_DIR     = rtl/minisoc_pll
 TB_DIR      = tb
 SYNTH_DIR   = syn
 SCRIPTS_DIR = scripts
@@ -10,7 +11,7 @@ FM_DIR      = formal
 UPF_DIR     = upf
 
 # ==========================================
-# Arquivos do RTL (Semana 3)
+# AES (Semana 3)
 # ==========================================
 RTL_FILES = \
     $(RTL_DIR)/minisoc_aes_sbox.sv \
@@ -22,27 +23,28 @@ RTL_FILES = \
     $(RTL_DIR)/minisoc_aes_inv_sub_bytes.sv \
     $(RTL_DIR)/minisoc_aes_inv_shift_rows.sv \
     $(RTL_DIR)/minisoc_aes_inv_mix_columns.sv \
-	$(RTL_DIR)/minisoc_aes_key_exp.sv     \
-	$(RTL_DIR)/minisoc_aes_dp.sv
+    $(RTL_DIR)/minisoc_aes_key_exp.sv \
+    $(RTL_DIR)/minisoc_aes_dp.sv
 
-TB_FILES = \
-	$(TB_DIR)/minisoc_aes_key_exp_dp_tb.sv
+TB_FILES = $(TB_DIR)/minisoc_aes_key_exp_dp_tb.sv
+TOP      = minisoc_aes_key_exp_dp_tb
 
 # ==========================================
-# Top do testbench
+# PLL (Semana 5)
 # ==========================================
-TOP = minisoc_aes_key_exp_dp_tb 
+PLL_FILES = $(PLL_DIR)/minisoc_pll_mock.sv
+PLL_TB    = $(TB_DIR)/minisoc_pll_mock_tb.sv
+PLL_TOP   = minisoc_pll_mock_tb
 
 # ==========================================
 # Flags
 # ==========================================
 TIMESCALE = 1ns/1ps
 
-# Flags para o Vlogan (Linting rígido habilitado)
 VLOGAN_FLAGS = -full64 \
                -sverilog \
                -kdb \
-			   -timescale=$(TIMESCALE) \
+               -timescale=$(TIMESCALE) \
                +lint=all,noVCDE
 
 VCS_FLAGS = -full64 \
@@ -52,57 +54,54 @@ VCS_FLAGS = -full64 \
             -kdb
 
 # ==========================================
-# Target de Lint (Meta: Zero erros)
+# AES — lint / syntax / compile / run
 # ==========================================
 lint:
-	@echo "=========================================="
-	@echo "  Executando Lint nos arquivos RTL...    "
-	@echo "=========================================="
+	@echo "=== Lint AES ==="
 	vlogan $(VLOGAN_FLAGS) $(RTL_FILES)
 
-# ==========================================
-# Verificação de sintaxe (RTL + TB)
-# ==========================================
 syntax:
-	vlogan $(VLOGAN_FLAGS) \
-		$(RTL_FILES) \
-		$(TB_FILES)
+	vlogan $(VLOGAN_FLAGS) $(RTL_FILES) $(TB_FILES)
 
-# ==========================================
-# Compilação / Elaboração
-# ==========================================
 compile: syntax
 	vcs $(VCS_FLAGS) -top $(TOP) $(RTL_FILES) $(TB_FILES)
 
-# ==========================================
-# Simulação Autoverificável
-# ==========================================
 run: compile
 	./simv
 
 # ==========================================
-# Abrir waveform (FSDB)
+# PLL — lint / syntax / compile / run
+# ==========================================
+pll_lint:
+	@echo "=== Lint PLL ==="
+	vlogan $(VLOGAN_FLAGS) $(PLL_FILES)
+
+pll_syntax:
+	vlogan $(VLOGAN_FLAGS) $(PLL_FILES) $(PLL_TB)
+
+pll_compile: pll_syntax
+	vcs $(VCS_FLAGS) -top $(PLL_TOP) -o simv_pll $(PLL_FILES) $(PLL_TB)
+
+pll_run: pll_compile
+	./simv_pll
+
+# ==========================================
+# Waveform
 # ==========================================
 wave:
 	verdi -ssf aes_spi.fsdb &
 
+pll_wave:
+	verdi -ssf pll.fsdb &
+
 # ==========================================
-# Limpeza da simulação
+# Clean
 # ==========================================
 clean_sim:
-	rm -rf \
-		csrc \
-		simv* \
-		*.daidir \
-		novas* \
-		AN.DB \
-		ucli.key \
-		verdi* \
-		DVEfiles \
-		.vlogan* \
-		*.fsdb \
-		*.log
+	rm -rf csrc simv* *.daidir novas* AN.DB ucli.key verdi* DVEfiles .vlogan* *.fsdb *.log
 
 clean: clean_sim
 
-.PHONY: lint syntax compile run wave clean clean_sim
+.PHONY: lint syntax compile run \
+        pll_lint pll_syntax pll_compile pll_run \
+        wave pll_wave clean clean_sim
