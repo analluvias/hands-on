@@ -45,6 +45,13 @@ SPI_RX_FILES = $(SPI_DIR)/minisoc_spi_rx.sv
 SPI_RX_TB    = $(TB_DIR)/minisoc_spi_rx_tb.sv
 SPI_RX_TOP   = minisoc_spi_rx_tb
 
+# ==========================================
+# SPI core (Semana 5, Issue 3)
+# ==========================================
+SPI_CORE_FILES = $(SPI_DIR)/minisoc_spi_core.sv
+SPI_CORE_TB    = $(TB_DIR)/minisoc_spi_core_tb.sv
+SPI_CORE_TOP   = minisoc_spi_core_tb
+
 
 # ==========================================
 # Flags
@@ -120,6 +127,23 @@ spi_rx_compile:
 
 spi_rx_run: spi_rx_compile
 	./simv_spi_rx
+
+#===========================================
+#			spi core
+#===========================================
+
+spi_core_lint:
+	@echo "=== Lint SPI core (RTL) ==="
+	vlogan $(VLOGAN_FLAGS) $(SPI_CORE_FILES)
+
+spi_core_compile:
+	vlogan -full64 -sverilog -kdb -timescale=$(TIMESCALE) \
+		$(SPI_CORE_FILES) $(SPI_CORE_TB)
+	vcs $(VCS_FLAGS) -top $(SPI_CORE_TOP) -o simv_spi_core \
+		$(SPI_CORE_FILES) $(SPI_CORE_TB)
+
+spi_core_run: spi_core_compile
+	./simv_spi_core
 
 
 # ==========================================
