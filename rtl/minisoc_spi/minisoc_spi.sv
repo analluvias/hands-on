@@ -64,12 +64,12 @@ module minisoc_spi (
     output logic         cmd_start,
 
     // --- Debug ------------------------------------------------------------
-    output logic [31:0]  version_dbg
+    output logic [31:0]  version_dbg,
 
     // --- Controle do PLL e do Memory Mux ----------------------------------
     output logic         pll_enable,
     output logic [1:0]   pll_div_sel,
-    output logic         mem_sel_aes,
+    output logic         mem_sel_aes
 );
 
     // -------------------------------------------------------------------------
@@ -118,7 +118,7 @@ module minisoc_spi (
         .read_data           (read_data),
         .pll_enable          (pll_enable),
         .pll_div_sel         (pll_div_sel),
-        .mem_sel_aes         (mem_sel_aes),
+        .mem_sel_aes         (mem_sel_aes)
     );
 
     // -------------------------------------------------------------------------
