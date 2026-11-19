@@ -67,7 +67,9 @@ SPI_TX_TOP   = minisoc_spi_tx_tb
 SPI_TOP_FILES = $(SPI_DIR)/minisoc_spi_rx.sv \
                 $(SPI_DIR)/minisoc_spi_core.sv \
                 $(SPI_DIR)/minisoc_spi_tx.sv \
-                $(SPI_DIR)/minisoc_spi.sv
+                $(SPI_DIR)/minisoc_spi.sv \
+                $(PLL_DIR)/minisoc_pll_mock.sv
+
 SPI_TOP_TB    = $(TB_DIR)/minisoc_spi_tb.sv
 SPI_TOP_TOP   = minisoc_spi_tb
 
