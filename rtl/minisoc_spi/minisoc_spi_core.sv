@@ -50,6 +50,11 @@ module minisoc_spi_core (
 
     // Para o MISO TX (Issue 4)
     output logic [31:0]  read_data
+
+    // --- Saídas para o PLL e o Memory Mux --------------------------------
+    output logic         pll_enable,
+    output logic [1:0]   pll_div_sel,
+    output logic         mem_sel_aes,
 );
 
     // =========================================================================
@@ -216,4 +221,8 @@ module minisoc_spi_core (
     assign cfg_mode       = mode_q;
     assign cfg_decrypt    = decrypt_q;
 
+    // Saídas de controle para PLL e memory mux (§5.4 §6.3)
+    assign pll_enable  = pll_enable_q;
+    assign pll_div_sel = pll_div_sel_q;
+    assign mem_sel_aes = mem_sel_aes_q;
 endmodule
