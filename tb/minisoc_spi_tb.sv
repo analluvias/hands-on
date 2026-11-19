@@ -84,7 +84,7 @@ module minisoc_spi_tb;
     // clk @ 2 GHz (500 ps período, 250 ps half-period)
     // -------------------------------------------------------------------------
     initial clk = 1'b0;
-    always #250 clk = ~clk;
+    always #0.25 clk = ~clk;   // 0.25 ns = 250 ps (timescale 1ns/1ps)
 
     // -------------------------------------------------------------------------
     // Monitor de cmd_start
