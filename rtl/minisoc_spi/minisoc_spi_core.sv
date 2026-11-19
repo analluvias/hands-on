@@ -49,7 +49,7 @@ module minisoc_spi_core (
     output logic         cmd_start,
 
     // Para o MISO TX (Issue 4)
-    output logic [31:0]  read_data
+    output logic [31:0]  read_data,
 
     // --- Saídas para o PLL e o Memory Mux --------------------------------
     output logic         pll_enable,
