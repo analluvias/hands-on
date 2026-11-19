@@ -54,7 +54,7 @@ module minisoc_spi_core (
     // --- Saídas para o PLL e o Memory Mux --------------------------------
     output logic         pll_enable,
     output logic [1:0]   pll_div_sel,
-    output logic         mem_sel_aes,
+    output logic         mem_sel_aes
 );
 
     // =========================================================================
