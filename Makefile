@@ -54,6 +54,14 @@ SPI_CORE_TOP   = minisoc_spi_core_tb
 
 
 # ==========================================
+# SPI TX (Semana 5, Issue 4)
+# ==========================================
+SPI_TX_FILES = $(SPI_DIR)/minisoc_spi_tx.sv
+SPI_TX_TB    = $(TB_DIR)/minisoc_spi_tx_tb.sv
+SPI_TX_TOP   = minisoc_spi_tx_tb
+
+
+# ==========================================
 # Flags
 # ==========================================
 TIMESCALE = 1ns/1ps
@@ -145,6 +153,22 @@ spi_core_compile:
 spi_core_run: spi_core_compile
 	./simv_spi_core
 
+# ==========================================
+# SPI TX (Semana 5, Issue 4)
+# ==========================================
+
+spi_tx_lint:
+	@echo "=== Lint SPI TX ==="
+	vlogan $(VLOGAN_FLAGS) $(SPI_TX_FILES)
+
+spi_tx_compile:
+	vlogan -full64 -sverilog -kdb -timescale=$(TIMESCALE) \
+		$(SPI_TX_FILES) $(SPI_TX_TB)
+	vcs $(VCS_FLAGS) -top $(SPI_TX_TOP) -o simv_spi_tx \
+		$(SPI_TX_FILES) $(SPI_TX_TB)
+
+spi_tx_run: spi_tx_compile
+	./simv_spi_tx
 
 # ==========================================
 # Clean
@@ -154,7 +178,10 @@ clean_sim:
 
 clean: clean_sim
 
+# .PHONY atualizado
 .PHONY: lint syntax compile run \
         pll_lint pll_syntax pll_compile pll_run \
         spi_rx_lint spi_rx_compile spi_rx_run \
+        spi_core_lint spi_core_compile spi_core_run \
+        spi_tx_lint spi_tx_compile spi_tx_run \
         wave pll_wave clean clean_sim
