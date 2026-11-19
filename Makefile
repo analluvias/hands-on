@@ -62,6 +62,16 @@ SPI_TX_TOP   = minisoc_spi_tx_tb
 
 
 # ==========================================
+# SPI — integração top (Semana 5, Issue 5)
+# ==========================================
+SPI_TOP_FILES = $(SPI_DIR)/minisoc_spi_rx.sv \
+                $(SPI_DIR)/minisoc_spi_core.sv \
+                $(SPI_DIR)/minisoc_spi_tx.sv \
+                $(SPI_DIR)/minisoc_spi.sv
+SPI_TOP_TB    = $(TB_DIR)/minisoc_spi_tb.sv
+SPI_TOP_TOP   = minisoc_spi_tb
+
+# ==========================================
 # Flags
 # ==========================================
 TIMESCALE = 1ns/1ps
@@ -170,6 +180,23 @@ spi_tx_compile:
 spi_tx_run: spi_tx_compile
 	./simv_spi_tx
 
+
+#===========================================
+#	SPI CORE FLAGS
+#===========================================
+spi_lint:
+	@echo "=== Lint SPI (top) ==="
+	vlogan $(VLOGAN_FLAGS) $(SPI_TOP_FILES)
+
+spi_compile:
+	vlogan -full64 -sverilog -kdb -timescale=$(TIMESCALE) \
+		$(SPI_TOP_FILES) $(SPI_TOP_TB)
+	vcs $(VCS_FLAGS) -top $(SPI_TOP_TOP) -o simv_spi \
+		$(SPI_TOP_FILES) $(SPI_TOP_TB)
+
+spi_run: spi_compile
+	./simv_spi
+
 # ==========================================
 # Clean
 # ==========================================
@@ -184,4 +211,5 @@ clean: clean_sim
         spi_rx_lint spi_rx_compile spi_rx_run \
         spi_core_lint spi_core_compile spi_core_run \
         spi_tx_lint spi_tx_compile spi_tx_run \
+        spi_lint spi_compile spi_run \
         wave pll_wave clean clean_sim
