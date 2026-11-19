@@ -157,8 +157,14 @@ module minisoc_spi_tb;
     // Sequência de testes
     // -------------------------------------------------------------------------
     initial begin
+        // Declarações locais (SV exige no início do bloco)
+        logic [31:0] aes_status_init;
+        logic [31:0] version_init;
+        logic [31:0] sys_status_init;
+
         $fsdbDumpfile("spi_int.fsdb");
         $fsdbDumpvars(0, minisoc_spi_tb, "+all");
+
 
         spi_sclk           = 1'b0;
         spi_cs_n           = 1'b1;
@@ -253,9 +259,7 @@ module minisoc_spi_tb;
         check("T5: pll_locked=0 antes do teste RO", pll_locked == 1'b0);
 
         // Captura estado inicial
-        logic [31:0] aes_status_init;
-        logic [31:0] version_init;
-        logic [31:0] sys_status_init;
+
         spi_read(6'h0C, aes_status_init);
         spi_read(6'h0D, version_init);
         spi_read(6'h0F, sys_status_init);
