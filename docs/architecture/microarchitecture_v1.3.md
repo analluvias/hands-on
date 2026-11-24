@@ -413,22 +413,92 @@ Multi-bit CDC é intrinsecamente inseguro se o sinal muda enquanto é amostrado.
 
 **O que NÃO cobre:** TX MISO (§5.5), integração top (§5.6), integração com AES engine real (status_*/cfg_* reais).
 
-### 5.5 minisoc_spi_tx — transmissor MISO (placeholder, Issue 4)
+### 5.5 minisoc_spi_tx — transmissor MISO
 
-**Escopo futuro.** Este bloco serializará read_data[31:0] no MISO na **borda de descida** de spi_sclk, durante a 2ª transação (fase NOP, endereço 0x3F). Interface prevista:
+**Domínio:** spi_sclk.
 
-| Sinal | Direção | Largura |
-|---|---|---|
-| spi_sclk, spi_cs_n, rst_n | entrada | 1/1/1 |
-| read_data | entrada | 32 (do core §5.4) |
-| miso_loaded | entrada | 1 (flag do core; pode ser gerado por detecção de toggle de volta) |
-| spi_miso | saída | 1 |
+**Interface:**
 
-Implementação: shift register de 32 bits carregado de read_data em posedge de um flag, deslocado em negedge spi_sclk. MISO em 0 quando spi_cs_n=1.
+| Sinal | Direção | Largura | Descrição |
+|---|---|---|---|
+| spi_sclk | entrada | 1 | Clock do SPI master; shift na borda de descida |
+| spi_cs_n | entrada | 1 | Chip select ativo baixo. negedge = load; posedge = reset do estado |
+| rst_n | entrada | 1 | Reset assíncrono global |
+| read_data | entrada | 32 | Do core (quasi-estático, §5.4) |
+| spi_miso | saída | 1 | Serial out (MSB-first) |
+
+**Microarquitetura interna:**
+- miso_shift_reg[39:0] — shift register de 40 bits: 8 zeros + read_data[31:0].
+- cs_was_falling — flag que marca que o load já foi feito neste frame.
+
+**Timing (Mode 0):**
+- negedge spi_cs_n: carrega miso_shift_reg = {8'h00, read_data}.
+- posedge spi_sclk: master amostra MISO (DUT não faz nada no TX).
+- negedge spi_sclk: DUT desloca miso_shift_reg <<= 1 (MISO atualiza).
+- posedge spi_cs_n: cs_was_falling zerado (prepara próximo load).
+
+**Decisões de projeto:**
+1. Load em negedge spi_cs_n, não em flag dedicado. O escopo sugeria miso_loaded gerado em frame_valid_toggle, mas o toggle só ocorre no fim de um frame — quando o NOP começa, o toggle já passou e não há como distinguir "NOP novo" de "read request novo" sem decodificar o frame. A janela segura de load é o negedge spi_cs_n: nesse momento, read_data_q do core já está estável há ≥ 2 ciclos de spi_sclk (o master respeita T_CS_IDLE entre transações).
+2. MISO = 0 quando spi_cs_n = 1 (não high-Z). Spec permite as duas opções; escolhemos 0 por simplicidade de síntese (evita tri-state no netlist).
+3. Sem CDC explícito. read_data é quasi-estático (garantia dada pelo protocolo). Não se adiciona 2FF nem handshake.
+4. 4 eventos na sensitivity list do always_ff (negedge spi_sclk, negedge spi_cs_n, posedge spi_cs_n, negedge rst_n). Necessário para limpar cs_was_falling entre frames. Lint pode sinalizar "unusual async reset" — justificado no header do módulo.
+
+**Verificação (tb/minisoc_spi_tx_tb.sv):** TB dirigido, 7 testes:
+
+| Teste | O que valida |
+|---|---|
+| T1 | read_data=0 → MISO = {8'h00, 0x00000000} |
+| T2 | read_data=0xDEADBEEF → MISO = {8'h00, 0xDEADBEEF} |
+| T3 | read_data=0xFFFFFFFF → MISO = {8'h00, 0xFFFFFFFF} |
+| T4 | read_data=0x12345678 → MISO = {8'h00, 0x12345678} |
+| T5 | read_data muda entre frames → MISO reflete novo valor |
+| T6 | MISO = 0 quando CS = 1 (idle) |
+| T7 | Frame abortado (CS sobe no meio) → MISO não trava em X |
+
+**Mecânica do TB:**
+- SPI master model captura MISO no posedge spi_sclk (Mode 0), 40 bits por frame.
+- SPI sclk @ 25 MHz (T_SCLK_HALF = 20 ns).
+
+**O que NÃO cobre:** endereço NOP (0x3F) — o slave não decodifica addr; carrega no negedge CS independente de RWb/ADDR. Integração com RX+core no top (§5.6).
 
 ### 5.6 minisoc_spi — integração top
 
-Instancia minisoc_spi_rx + minisoc_spi_core + minisoc_spi_tx (§5.3, §5.4, §5.5). A interface externa é a definida em §5.1 (spi_sclk, spi_cs_n, spi_mosi, spi_miso) + clk + rst_n + cfg_* + status_* + pll_locked. Detalhamento final na Issue 5.
+Instancia minisoc_spi_rx + minisoc_spi_core + minisoc_spi_tx (§5.3, §5.4, §5.5).
+
+**Interface externa (Block Guide §3):**
+
+| Grupo | Sinais | Direção | Largura |
+|---|---|---|---|
+| SPI IF | spi_sclk, spi_cs_n, spi_mosi | entrada | 1/1/1 |
+| SPI IF | spi_miso | saída | 1 |
+| CLK/RESET | clk, rst_n | entrada | 1/1 |
+| AES status | status_busy, status_done, status_error | entrada | 1/1/1 |
+| AES status | status_blocks_done | entrada | 9 |
+| PLL | pll_locked | entrada | 1 |
+| AES config | cfg_key, cfg_iv | saída | 128/128 |
+| AES config | cfg_counter | saída | 64 |
+| AES config | cfg_num_blocks | saída | 9 |
+| AES config | cfg_mode | saída | 3 |
+| AES config | cfg_decrypt, cmd_start | saída | 1/1 |
+| PLL/Mux | pll_enable, pll_div_sel, mem_sel_aes | saída | 1/2/1 |
+| Debug | version_dbg | saída | 32 |
+
+**Conexões internas:**
+- u_rx → u_core: frame_data[39:0], frame_valid_toggle.
+- u_core → u_tx: read_data[31:0].
+- u_core → externo: cfg_*, cmd_start, pll_enable, pll_div_sel, mem_sel_aes.
+- u_tx → externo: spi_miso.
+
+**Adições da Issue 6 (estendem §5.4):**
+- Saídas pll_enable, pll_div_sel[1:0], mem_sel_aes do core — necessárias para fechar o loop com o PLL mock no TB de integração (§13.5).
+- Saída version_dbg[31:0] = 32'h0000_0001 (duplica VERSION 0x0D do core, para conveniência do TB em waveform).
+
+**Decisões de projeto:**
+1. rst_n passa direto para os 3 sub-blocos. A sincronização (reset synchronizer de 2FF, §3) é responsabilidade do minisoc_top, NÃO deste módulo.
+2. version_dbg duplica a constante do core. Se VERSION mudar, atualizar nos dois lugares (§6, linha 0x0D do core; localparam no top).
+3. Nenhum handshake extra entre core e TX: read_data é quasi-estático até a próxima requisição.
+
+**Verificação (tb/minisoc_spi_tb.sv):** TB de integração completo, ~80 checks, cobre todos os critérios de aceite da Semana 5. Detalhado na §13.5.
 
 ---
 
@@ -1025,6 +1095,8 @@ agora a microarquitetura cobre:
 
 9. **SPI Front-End detalhado (§5).** Divisão em minisoc_spi_rx (domínio spi_sclk, reset por posedge spi_cs_n, toggle de frame), minisoc_spi_core (CDC 2FF + edge detect, decode direto de frame_data — **fix do bug de 1 frame**, register bank completo, cmd_start W1P, read_data latcheado) e minisoc_spi_tx (placeholder). Layout de bits dos registradores de controle (§6.4) e TBs dirigidos por módulo (§13).
 
+10. **SPI integração completa (Issue 4, 5, 6).** minisoc_spi_tx (load no negedge CS, shift no negedge spi_sclk, MISO=0 em idle), minisoc_spi top (instancia RX+core+TX, saídas pll_enable/pll_div_sel/mem_sel_aes/version_dbg), e TB de integração com ~80 checks cobrindo round-trip de todos os R/W, imutabilidade dos RO, PLL lock nos 4 divisores (loop fechado com PLL mock), START W1P e propagação de cfg_*. Fecha os 6 issues da Semana 5.
+
 ## 13. Verificação dos Módulos da Semana 5
 
 TBs dirigidos por módulo, com make <target>_run no Makefile. Todos geram FSDB para inspeção no Verdi.
@@ -1051,7 +1123,37 @@ TBs dirigidos por módulo, com make <target>_run no Makefile. Todos geram FSDB p
 
 **Resultado:** 32 PASS / 0 FAIL.
 
-### 13.4 Lint
+### 13.4 minisoc_spi_tx_tb.sv (§5.5)
 
-- make pll_lint, make spi_rx_lint, make spi_core_lint: **0 erros, 0 warnings** no RTL.
-- TBs re-lintados no pll_syntax/spi_rx_run/spi_core_run: warnings Lint-[NS] Null statement suprimidos por +lint=all,noNS no VLOGAN_FLAGS — são construções padrão de TB (@(posedge clk);, wait(...);) sem impacto em síntese.
+**Cobertura:** serialização MISO em MSB-first, load no negedge CS, shift no negedge spi_sclk, MISO=0 em idle, comportamento em abort.
+
+**Resultado:** 7 PASS / 0 FAIL.
+
+### 13.5 minisoc_spi_tb.sv (§5.6) — TB de integração da Semana 5
+
+**Cobertura completa dos critérios de aceite:**
+
+| Teste | O que valida | Checks |
+|---|---|---|
+| T1 | Round-trip de KEY0..3 e IV0..3 com 0x00000000, 0xFFFFFFFF, 0xA5A5A5A5 (8 regs × 3 padrões × 1 round-trip) + check cfg_key/cfg_iv final | 26 |
+| T2 | COUNTER_HI/LO com 3 padrões + check cfg_counter final | 7 |
+| T3 | NUM_BLOCKS com 3 padrões (mask 0x1FF) + check cfg_num_blocks propagation | 6 |
+| T4 | AES_CONTROL com 3 padrões (mask; START W1P) + cfg_mode/cfg_decrypt + pulse iff START=1 | 12 |
+| T5 | Imutabilidade de AES_STATUS, VERSION, SYSTEM_STATUS após writes | 11 |
+| T6 | PLL enable+lock nos 4 divisores (loop fechado com PLL mock) | 17 |
+| T7 | MISO = 0 em CS idle | 1 |
+
+**Mecânica:**
+- SPI master @ 25 MHz no domínio spi_sclk.
+- clk @ 2 GHz (half-period 0.25 ns, timescale 1ns/1ps).
+- PLL mock instanciado no mesmo top: pll_enable/pll_div_sel do minisoc_spi → PLL → pll_locked → minisoc_spi.
+- send_write e send_read com Mode 0, MSB-first, 40 bits.
+- Read = 2 transações (read request + NOP, captura MISO na 2ª).
+
+**Bug encontrado e corrigido:** na primeira execução, 43 FAILs com padrão claro de "1 frame de atraso" em todos os reads. Causa: clk com `#250` no timescale 1ns/1ps = 250 ns (2 MHz), não 250 ps (2 GHz) como o comentário afirmava. T_CS_IDLE = 100 ns ficou menor que 1 ciclo de clk, então frame_pulse não propagava entre o read request e o NOP. Corrigido com `#0.25` (250 ps = 2 GHz). Após o fix, ~80 PASS / 0 FAIL.
+
+### 13.6 Lint consolidado
+
+- make pll_lint, make spi_rx_lint, make spi_core_lint, make spi_tx_lint, make spi_lint: **0 erros, 0 warnings** no RTL.
+- TBs re-lintados no pll_syntax/spi_*_run: warnings Lint-[NS] Null statement suprimidos por +lint=all,noVCDE,noNS no VLOGAN_FLAGS — são construções padrão de TB (@(posedge clk);, wait(...);) sem impacto em síntese.
+- Possível warning "unusual async reset" no minisoc_spi_tx (4 eventos na sensitivity list): justificado no header do módulo e na §5.5.
