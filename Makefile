@@ -73,12 +73,31 @@ SPI_TOP_FILES = $(SPI_DIR)/minisoc_spi_rx.sv \
 SPI_TOP_TB    = $(TB_DIR)/minisoc_spi_tb.sv
 SPI_TOP_TOP   = minisoc_spi_tb
 
+
 # >>> ISSUE 1 — Memory (Semana 6) — variáveis -----------------------------
 MEM_DIR   = rtl/minisoc_mem
 MEM_FILES = $(MEM_DIR)/minisoc_memory.sv
 MEM_TB    = $(TB_DIR)/minisoc_memory_tb.sv
 MEM_TOP   = minisoc_memory_tb
 # <<< ISSUE 1 -------------------------------------------------------------
+
+# >>> ISSUE 2 — AES Top (Semana 6) — variáveis ----------------------------
+AES_TOP_FILES = $(RTL_DIR)/minisoc_aes_sbox.sv \
+                $(RTL_DIR)/minisoc_aes_sub_bytes.sv \
+                $(RTL_DIR)/minisoc_aes_shift_rows.sv \
+                $(RTL_DIR)/minisoc_aes_mix_columns.sv \
+                $(RTL_DIR)/minisoc_aes_add_round_key.sv \
+                $(RTL_DIR)/minisoc_aes_inv_sbox.sv \
+                $(RTL_DIR)/minisoc_aes_inv_sub_bytes.sv \
+                $(RTL_DIR)/minisoc_aes_inv_shift_rows.sv \
+                $(RTL_DIR)/minisoc_aes_inv_mix_columns.sv \
+                $(RTL_DIR)/minisoc_aes_key_exp.sv \
+                $(RTL_DIR)/minisoc_aes_dp.sv \
+                $(RTL_DIR)/minisoc_aes_top.sv
+
+AES_TOP_TB    = $(TB_DIR)/minisoc_aes_top_tb.sv
+AES_TOP_TOP   = minisoc_aes_top_tb
+# <<< ISSUE 2 -------------------------------------------------------------
 
 # ==========================================
 # Flags
@@ -224,6 +243,24 @@ mem_run: mem_compile
 	./simv_mem
 # <<< ISSUE 1 -------------------------------------------------------------
 
+# >>> ISSUE 2 — AES Top (Semana 6) — alvos --------------------------------
+aes_top_lint:
+	@echo "=== Lint AES Top ==="
+	vlogan $(VLOGAN_FLAGS) $(AES_TOP_FILES)
+
+aes_top_syntax:
+	vlogan $(VLOGAN_FLAGS) $(AES_TOP_FILES) $(AES_TOP_TB)
+
+aes_top_compile: aes_top_syntax
+	vlogan -full64 -sverilog -kdb -timescale=$(TIMESCALE) \
+		$(AES_TOP_FILES) $(AES_TOP_TB)
+	vcs $(VCS_FLAGS) -top $(AES_TOP_TOP) -o simv_aes_top \
+		$(AES_TOP_FILES) $(AES_TOP_TB)
+
+aes_top_run: aes_top_compile
+	./simv_aes_top
+# <<< ISSUE 2 -------------------------------------------------------------
+
 # ==========================================
 # Clean
 # ==========================================
@@ -240,5 +277,5 @@ clean: clean_sim
         spi_tx_lint spi_tx_compile spi_tx_run \
         spi_lint spi_compile spi_run \
         mem_lint mem_syntax mem_compile mem_run \
-        wave pll_wave clean clean_sim
-		
+        wave pll_wave clean clean_sim \
+		es_top_lint aes_top_syntax aes_top_compile aes_top_run
