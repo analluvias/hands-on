@@ -73,6 +73,13 @@ SPI_TOP_FILES = $(SPI_DIR)/minisoc_spi_rx.sv \
 SPI_TOP_TB    = $(TB_DIR)/minisoc_spi_tb.sv
 SPI_TOP_TOP   = minisoc_spi_tb
 
+# >>> ISSUE 1 — Memory (Semana 6) — variáveis -----------------------------
+MEM_DIR   = rtl/minisoc_mem
+MEM_FILES = $(MEM_DIR)/minisoc_memory.sv
+MEM_TB    = $(TB_DIR)/minisoc_memory_tb.sv
+MEM_TOP   = minisoc_memory_tb
+# <<< ISSUE 1 -------------------------------------------------------------
+
 # ==========================================
 # Flags
 # ==========================================
@@ -199,6 +206,24 @@ spi_compile:
 spi_run: spi_compile
 	./simv_spi
 
+# >>> ISSUE 1 — Memory (Semana 6) — alvos ---------------------------------
+mem_lint:
+	@echo "=== Lint Memory ==="
+	vlogan $(VLOGAN_FLAGS) $(MEM_FILES)
+
+mem_syntax:
+	vlogan $(VLOGAN_FLAGS) $(MEM_FILES) $(MEM_TB)
+
+mem_compile: mem_syntax
+	vlogan -full64 -sverilog -kdb -timescale=$(TIMESCALE) \
+		$(MEM_FILES) $(MEM_TB)
+	vcs $(VCS_FLAGS) -top $(MEM_TOP) -o simv_mem \
+		$(MEM_FILES) $(MEM_TB)
+
+mem_run: mem_compile
+	./simv_mem
+# <<< ISSUE 1 -------------------------------------------------------------
+
 # ==========================================
 # Clean
 # ==========================================
@@ -214,4 +239,6 @@ clean: clean_sim
         spi_core_lint spi_core_compile spi_core_run \
         spi_tx_lint spi_tx_compile spi_tx_run \
         spi_lint spi_compile spi_run \
+        mem_lint mem_syntax mem_compile mem_run \
         wave pll_wave clean clean_sim
+		
