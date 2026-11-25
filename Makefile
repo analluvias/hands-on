@@ -107,6 +107,27 @@ SPI_TOP_TB    = $(TB_DIR)/minisoc_spi_tb.sv
 SPI_TOP_TOP   = minisoc_spi_tb
 VECTORS_DIR    = tb/vectors
 VECTORS_SCRIPT = tools/aes_ref_model.py
+
+# >>> ISSUE 2+4 — AES + Memória (Semana 6) — variáveis ---------------------
+AES_MEM_FILES = $(RTL_DIR)/minisoc_aes_sbox.sv \
+                $(RTL_DIR)/minisoc_aes_sub_bytes.sv \
+                $(RTL_DIR)/minisoc_aes_shift_rows.sv \
+                $(RTL_DIR)/minisoc_aes_mix_columns.sv \
+                $(RTL_DIR)/minisoc_aes_add_round_key.sv \
+                $(RTL_DIR)/minisoc_aes_inv_sbox.sv \
+                $(RTL_DIR)/minisoc_aes_inv_sub_bytes.sv \
+                $(RTL_DIR)/minisoc_aes_inv_shift_rows.sv \
+                $(RTL_DIR)/minisoc_aes_inv_mix_columns.sv \
+                $(RTL_DIR)/minisoc_aes_key_exp.sv \
+                $(RTL_DIR)/minisoc_aes_dp.sv \
+                $(RTL_DIR)/minisoc_aes_top.sv \
+                $(MEM_DIR)/minisoc_memory.sv
+
+AES_MEM_TB  = $(TB_DIR)/minisoc_aes_top_tb.sv
+AES_MEM_TOP = minisoc_aes_top_tb
+# <<< ISSUE 2+4 -----------------------------------------------------------
+
+
 # ==========================================
 # Flags
 # ==========================================
@@ -278,6 +299,20 @@ vectors_clean:
 	rm -rf $(VECTORS_DIR)
 # <<< ISSUE 3 -------------------------------------------------------------
 
+# >>> ISSUE 2+4 — AES + Memória (Semana 6) — alvos ------------------------
+aes_mem_lint:
+	@echo "=== Lint AES + Memory ==="
+	vlogan $(VLOGAN_FLAGS) -I. $(AES_MEM_FILES)
+
+aes_mem_compile: vectors
+	vlogan -full64 -sverilog -kdb -timescale=$(TIMESCALE) -I. \
+		$(AES_MEM_FILES) $(AES_MEM_TB)
+	vcs $(VCS_FLAGS) -I. -top $(AES_MEM_TOP) -o simv_aes_mem \
+		$(AES_MEM_FILES) $(AES_MEM_TB)
+
+aes_mem_run: aes_mem_compile
+	./simv_aes_mem | tee aes_mem_run.log
+# <<< ISSUE 2+4 -----------------------------------------------------------
 
 # ==========================================
 # Clean
@@ -297,5 +332,6 @@ clean: clean_sim
         spi_lint spi_compile spi_run \
         mem_lint mem_syntax mem_compile mem_run \
         aes_top_lint aes_top_syntax aes_top_compile aes_top_run \
+        aes_mem_lint aes_mem_compile aes_mem_run \
         vectors vectors_clean \
         wave pll_wave clean clean_sim
