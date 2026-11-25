@@ -132,11 +132,21 @@ module minisoc_aes_top_tb;
     int case_errors;
     logic timed_out;
 
+        // =========================================================================
+    // Helpers de metadata — desempacotam VALID_CASES[i] e INVALID_CASES[i]
     // =========================================================================
-    // Helpers de path — reconstroem o nome do arquivo a partir dos campos
-    // numéricos de VALID_CASES[]. Mantém o Python como fonte de verdade
-    // (a numeração mode/decrypt/num_blocks vem do .svh gerado).
-    // =========================================================================
+    function automatic logic [2:0] case_mode(input logic [15:0] packed_case);
+        return packed_case[2:0];
+    endfunction
+
+    function automatic logic case_decrypt(input logic [15:0] packed_case);
+        return packed_case[3];
+    endfunction
+
+    function automatic logic [8:0] case_nblocks(input logic [15:0] packed_case);
+        return packed_case[12:4];
+    endfunction
+
     function automatic string mode_str(input logic [2:0] m);
         case (m)
             3'b000: return "ECB";
@@ -152,16 +162,16 @@ module minisoc_aes_top_tb;
 
     function automatic string valid_input_path(input int i);
         return $sformatf("tb/vectors/%s_%s_%0d_input.mem",
-                         mode_str(VALID_CASES[i].mode),
-                         dir_str(VALID_CASES[i].decrypt),
-                         VALID_CASES[i].num_blocks);
+                         mode_str(case_mode(VALID_CASES[i])),
+                         dir_str(case_decrypt(VALID_CASES[i])),
+                         case_nblocks(VALID_CASES[i]));
     endfunction
 
     function automatic string valid_expected_path(input int i);
         return $sformatf("tb/vectors/%s_%s_%0d_expected.mem",
-                         mode_str(VALID_CASES[i].mode),
-                         dir_str(VALID_CASES[i].decrypt),
-                         VALID_CASES[i].num_blocks);
+                         mode_str(case_mode(VALID_CASES[i])),
+                         dir_str(case_decrypt(VALID_CASES[i])),
+                         case_nblocks(VALID_CASES[i]));
     endfunction
 
     // =========================================================================
@@ -244,12 +254,12 @@ module minisoc_aes_top_tb;
         int       mem_errors;
 
         case_name = $sformatf("%s_%s_%0d (mode=%03b dec=%0d nb=%0d)",
-                        mode_str(VALID_CASES[idx].mode),
-                        dir_str(VALID_CASES[idx].decrypt),
-                        VALID_CASES[idx].num_blocks,
-                        VALID_CASES[idx].mode,
-                        VALID_CASES[idx].decrypt,
-                        VALID_CASES[idx].num_blocks);
+                        mode_str(case_mode(VALID_CASES[idx])),
+                        dir_str(case_decrypt(VALID_CASES[idx])),
+                        case_nblocks(VALID_CASES[idx]),
+                        case_mode(VALID_CASES[idx]),
+                        case_decrypt(VALID_CASES[idx]),
+                        case_nblocks(VALID_CASES[idx]));
         test_count++;
         case_errors = 0;
         mem_errors  = 0;
@@ -271,9 +281,9 @@ module minisoc_aes_top_tb;
         cfg_key        = KEY_CONST;
         cfg_iv         = IV_CONST;
         cfg_counter    = COUNTER_CONST;
-        cfg_num_blocks = VALID_CASES[idx].num_blocks;
-        cfg_mode       = VALID_CASES[idx].mode;
-        cfg_decrypt    = VALID_CASES[idx].decrypt;
+        cfg_num_blocks = case_nblocks(VALID_CASES[idx]);
+        cfg_mode       = case_mode(VALID_CASES[idx]);
+        cfg_decrypt    = case_decrypt(VALID_CASES[idx]);
         repeat (2) @(posedge clk);
 
         // 5) Ownership AES (swap com AES ocioso — §7.2)
@@ -301,9 +311,9 @@ module minisoc_aes_top_tb;
             $error("[%s] status_done=%b (esperado 1)", case_name, status_done);
             case_errors++;
         end
-        if (status_blocks_done !== VALID_CASES[idx].num_blocks) begin
+        if (status_blocks_done !== case_nblocks(VALID_CASES[idx])) begin
             $error("[%s] status_blocks_done=%0d (esperado %0d)",
-                   case_name, status_blocks_done, VALID_CASES[idx].num_blocks);
+                   case_name, status_blocks_done, case_nblocks(VALID_CASES[idx]));
             case_errors++;
         end
         if (status_busy !== 1'b0) begin
@@ -350,9 +360,9 @@ module minisoc_aes_top_tb;
 
         case_name = $sformatf("INVALID[%0d] mode=%03b dec=%0d nb=%0d",
                               idx,
-                              INVALID_CASES[idx].mode,
-                              INVALID_CASES[idx].decrypt,
-                              INVALID_CASES[idx].num_blocks);
+                              case_mode(INVALID_CASES[idx]),
+                              case_decrypt(INVALID_CASES[idx]),
+                              case_nblocks(INVALID_CASES[idx]));
         test_count++;
         case_errors = 0;
 
@@ -366,9 +376,9 @@ module minisoc_aes_top_tb;
         cfg_key        = KEY_CONST;
         cfg_iv         = IV_CONST;
         cfg_counter    = COUNTER_CONST;
-        cfg_num_blocks = INVALID_CASES[idx].num_blocks;
-        cfg_mode       = INVALID_CASES[idx].mode;
-        cfg_decrypt    = INVALID_CASES[idx].decrypt;
+        cfg_num_blocks = case_nblocks(INVALID_CASES[idx]);
+        cfg_mode       = case_mode(INVALID_CASES[idx]);
+        cfg_decrypt    = case_decrypt(INVALID_CASES[idx]);
         repeat (2) @(posedge clk);
 
         // Ownership AES

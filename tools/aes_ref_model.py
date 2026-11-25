@@ -268,47 +268,47 @@ def write_mem_file(path, mem):
 def write_test_cases_svh(path, cases, invalid):
     """Gera include SV consumido pela TB (Issue #4).
 
-    VCS não aceita strings em localparam de array de struct — então
-    geramos apenas os campos numéricos e a TB monta os paths via
-    $sformatf a partir de (mode, decrypt, num_blocks).
+    Formato bulletproof: cada caso é um logic [15:0] empacotado e
+    preenchido em `initial` block — sem struct, sem string, sem
+    localparam de array. Funciona em qualquer versão do VCS.
+
+    Layout por caso (16 bits):
+        bits [ 2: 0] = mode
+        bit  [ 3]    = decrypt
+        bits [12: 4] = num_blocks
     """
+    def pack(mode, decrypt, nb):
+        return ((nb & 0x1FF) << 4) | ((decrypt & 1) << 3) | (mode & 0x7)
+
     lines = [
         "// =============================================================================",
         "// test_cases.svh — Auto-gerado por tools/aes_ref_model.py. NÃO EDITAR.",
         "//",
-        "// Uso na TB:",
-        '//   `include "tb/vectors/test_cases.svh"',
-        "//   for (int i = 0; i < NUM_VALID_CASES; i++) begin",
-        "//       // VALID_CASES[i].mode / .decrypt / .num_blocks",
-        "//       // caminho: tb/vectors/{MODE}_{DIR}_{N}_{input,expected}.mem",
-        "//       //          (TB monta via $sformatf)",
-        "//   end",
+        "// Cada caso é um logic [15:0] empacotado:",
+        "//   bits [ 2: 0] = mode",
+        "//   bit  [ 3]    = decrypt",
+        "//   bits [12: 4] = num_blocks",
+        "//",
+        "// Preenchidos em `initial` block (mais portável que localparam de array",
+        "// de struct, que quebra em algumas versões do VCS).",
         "// =============================================================================",
         "",
-        f"localparam int NUM_VALID_CASES = {len(cases)};",
+        f"localparam int NUM_VALID_CASES   = {len(cases)};",
+        f"localparam int NUM_INVALID_CASES = {len(invalid)};",
         "",
-        "typedef struct packed {",
-        "    logic [2:0] mode;",
-        "    logic       decrypt;",
-        "    logic [8:0] num_blocks;",
-        "} aes_case_meta_t;",
+        "logic [15:0] VALID_CASES   [0:NUM_VALID_CASES-1];",
+        "logic [15:0] INVALID_CASES [0:NUM_INVALID_CASES-1];",
         "",
-        "localparam aes_case_meta_t VALID_CASES[NUM_VALID_CASES] = '{",
+        "initial begin",
     ]
-    for c in cases:
-        lines.append(
-            f'    \'{{3\'b{c["mode"]:03b}, 1\'b{c["decrypt"]}, 9\'d{c["num_blocks"]}}},'
-        )
-    lines.append("};")
+    for i, c in enumerate(cases):
+        pk = pack(c["mode"], c["decrypt"], c["num_blocks"])
+        lines.append(f"    VALID_CASES[{i}] = 16'h{pk:04x};")
     lines.append("")
-    lines.append(f"localparam int NUM_INVALID_CASES = {len(invalid)};")
-    lines.append("")
-    lines.append("localparam aes_case_meta_t INVALID_CASES[NUM_INVALID_CASES] = '{")
-    for c in invalid:
-        lines.append(
-            f'    \'{{3\'b{c["mode"]:03b}, 1\'b{c["decrypt"]}, 9\'d{c["num_blocks"]}}},'
-        )
-    lines.append("};")
+    for i, c in enumerate(invalid):
+        pk = pack(c["mode"], c["decrypt"], c["num_blocks"])
+        lines.append(f"    INVALID_CASES[{i}] = 16'h{pk:04x};")
+    lines.append("end")
     lines.append("")
 
     with open(path, "w") as f:
