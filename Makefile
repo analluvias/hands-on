@@ -99,6 +99,14 @@ AES_TOP_TB    = $(TB_DIR)/minisoc_aes_top_tb.sv
 AES_TOP_TOP   = minisoc_aes_top_tb
 # <<< ISSUE 2 -------------------------------------------------------------
 
+
+# ==========================================
+# issue 3
+#===========================================
+SPI_TOP_TB    = $(TB_DIR)/minisoc_spi_tb.sv
+SPI_TOP_TOP   = minisoc_spi_tb
+VECTORS_DIR    = tb/vectors
+VECTORS_SCRIPT = tools/aes_ref_model.py
 # ==========================================
 # Flags
 # ==========================================
@@ -261,6 +269,16 @@ aes_top_run: aes_top_compile
 	./simv_aes_top
 # <<< ISSUE 2 -------------------------------------------------------------
 
+# >>> ISSUE 3 — Vetores (Semana 6) — alvos --------------------------------
+vectors:
+	@echo "=== Gerando vetores AES (ECB/CBC/CTR) ==="
+	python3 $(VECTORS_SCRIPT) --out-dir $(VECTORS_DIR)
+
+vectors_clean:
+	rm -rf $(VECTORS_DIR)
+# <<< ISSUE 3 -------------------------------------------------------------
+
+
 # ==========================================
 # Clean
 # ==========================================
@@ -270,6 +288,7 @@ clean_sim:
 clean: clean_sim
 
 # .PHONY atualizado
+# .PHONY atualizado
 .PHONY: lint syntax compile run \
         pll_lint pll_syntax pll_compile pll_run \
         spi_rx_lint spi_rx_compile spi_rx_run \
@@ -277,5 +296,6 @@ clean: clean_sim
         spi_tx_lint spi_tx_compile spi_tx_run \
         spi_lint spi_compile spi_run \
         mem_lint mem_syntax mem_compile mem_run \
-        wave pll_wave clean clean_sim \
-		es_top_lint aes_top_syntax aes_top_compile aes_top_run
+        aes_top_lint aes_top_syntax aes_top_compile aes_top_run \
+        vectors vectors_clean \
+        wave pll_wave clean clean_sim
