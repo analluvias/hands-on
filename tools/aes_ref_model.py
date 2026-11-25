@@ -265,9 +265,13 @@ def write_mem_file(path, mem):
         for w in mem:
             f.write(f"{w:08x}\n")
 
-
 def write_test_cases_svh(path, cases, invalid):
-    """Gera include SV consumido pela TB (Issue #4)."""
+    """Gera include SV consumido pela TB (Issue #4).
+
+    VCS não aceita strings em localparam de array de struct — então
+    geramos apenas os campos numéricos e a TB monta os paths via
+    $sformatf a partir de (mode, decrypt, num_blocks).
+    """
     lines = [
         "// =============================================================================",
         "// test_cases.svh — Auto-gerado por tools/aes_ref_model.py. NÃO EDITAR.",
@@ -275,38 +279,31 @@ def write_test_cases_svh(path, cases, invalid):
         "// Uso na TB:",
         '//   `include "tb/vectors/test_cases.svh"',
         "//   for (int i = 0; i < NUM_VALID_CASES; i++) begin",
-        "//       // VALID_CASES[i].mode / .decrypt / .num_blocks / .input_file / .expected_file",
+        "//       // VALID_CASES[i].mode / .decrypt / .num_blocks",
+        "//       // caminho: tb/vectors/{MODE}_{DIR}_{N}_{input,expected}.mem",
+        "//       //          (TB monta via $sformatf)",
         "//   end",
         "// =============================================================================",
         "",
         f"localparam int NUM_VALID_CASES = {len(cases)};",
         "",
-        "typedef struct {",
+        "typedef struct packed {",
         "    logic [2:0] mode;",
         "    logic       decrypt;",
         "    logic [8:0] num_blocks;",
-        "    string      input_file;",
-        "    string      expected_file;",
-        "} aes_test_case_t;",
+        "} aes_case_meta_t;",
         "",
-        "localparam aes_test_case_t VALID_CASES[NUM_VALID_CASES] = '{",
+        "localparam aes_case_meta_t VALID_CASES[NUM_VALID_CASES] = '{",
     ]
     for c in cases:
         lines.append(
-            f'    \'{{3\'b{c["mode"]:03b}, 1\'b{c["decrypt"]}, 9\'d{c["num_blocks"]}, '
-            f'"{c["input_file"]}", "{c["expected_file"]}"}},'
+            f'    \'{{3\'b{c["mode"]:03b}, 1\'b{c["decrypt"]}, 9\'d{c["num_blocks"]}}},'
         )
     lines.append("};")
     lines.append("")
     lines.append(f"localparam int NUM_INVALID_CASES = {len(invalid)};")
     lines.append("")
-    lines.append("typedef struct {")
-    lines.append("    logic [2:0] mode;")
-    lines.append("    logic       decrypt;")
-    lines.append("    logic [8:0] num_blocks;")
-    lines.append("} aes_invalid_case_t;")
-    lines.append("")
-    lines.append("localparam aes_invalid_case_t INVALID_CASES[NUM_INVALID_CASES] = '{")
+    lines.append("localparam aes_case_meta_t INVALID_CASES[NUM_INVALID_CASES] = '{")
     for c in invalid:
         lines.append(
             f'    \'{{3\'b{c["mode"]:03b}, 1\'b{c["decrypt"]}, 9\'d{c["num_blocks"]}}},'

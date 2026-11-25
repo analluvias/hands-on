@@ -302,12 +302,12 @@ vectors_clean:
 # >>> ISSUE 2+4 — AES + Memória (Semana 6) — alvos ------------------------
 aes_mem_lint:
 	@echo "=== Lint AES + Memory ==="
-	vlogan $(VLOGAN_FLAGS) -I. $(AES_MEM_FILES)
+	vlogan $(VLOGAN_FLAGS) $(AES_MEM_FILES)
 
 aes_mem_compile: vectors
 	vlogan -full64 -sverilog -kdb -timescale=$(TIMESCALE) -I. \
 		$(AES_MEM_FILES) $(AES_MEM_TB)
-	vcs $(VCS_FLAGS) -I. -top $(AES_MEM_TOP) -o simv_aes_mem \
+	vcs $(VCS_FLAGS) -top $(AES_MEM_TOP) -o simv_aes_mem \
 		$(AES_MEM_FILES) $(AES_MEM_TB)
 
 aes_mem_run: aes_mem_compile

@@ -133,6 +133,38 @@ module minisoc_aes_top_tb;
     logic timed_out;
 
     // =========================================================================
+    // Helpers de path — reconstroem o nome do arquivo a partir dos campos
+    // numéricos de VALID_CASES[]. Mantém o Python como fonte de verdade
+    // (a numeração mode/decrypt/num_blocks vem do .svh gerado).
+    // =========================================================================
+    function automatic string mode_str(input logic [2:0] m);
+        case (m)
+            3'b000: return "ECB";
+            3'b001: return "CBC";
+            3'b101: return "CTR";
+            default: return "INVALID";
+        endcase
+    endfunction
+
+    function automatic string dir_str(input logic d);
+        return d ? "dec" : "enc";
+    endfunction
+
+    function automatic string valid_input_path(input int i);
+        return $sformatf("tb/vectors/%s_%s_%0d_input.mem",
+                         mode_str(VALID_CASES[i].mode),
+                         dir_str(VALID_CASES[i].decrypt),
+                         VALID_CASES[i].num_blocks);
+    endfunction
+
+    function automatic string valid_expected_path(input int i);
+        return $sformatf("tb/vectors/%s_%s_%0d_expected.mem",
+                         mode_str(VALID_CASES[i].mode),
+                         dir_str(VALID_CASES[i].decrypt),
+                         VALID_CASES[i].num_blocks);
+    endfunction
+
+    // =========================================================================
     // Tasks auxiliares
     // =========================================================================
     task automatic ext_write(input logic [9:0] addr, input logic [31:0] data);
@@ -211,17 +243,19 @@ module minisoc_aes_top_tb;
         logic [31:0] rd;
         int       mem_errors;
 
-        case_name = $sformatf("%s (mode=%03b dec=%0d nb=%0d)",
-                              VALID_CASES[idx].input_file,
-                              VALID_CASES[idx].mode,
-                              VALID_CASES[idx].decrypt,
-                              VALID_CASES[idx].num_blocks);
+        case_name = $sformatf("%s_%s_%0d (mode=%03b dec=%0d nb=%0d)",
+                        mode_str(VALID_CASES[idx].mode),
+                        dir_str(VALID_CASES[idx].decrypt),
+                        VALID_CASES[idx].num_blocks,
+                        VALID_CASES[idx].mode,
+                        VALID_CASES[idx].decrypt,
+                        VALID_CASES[idx].num_blocks);
         test_count++;
         case_errors = 0;
         mem_errors  = 0;
 
         // 1) Carrega arquivos .mem
-        load_mem_files(VALID_CASES[idx].input_file, VALID_CASES[idx].expected_file);
+        load_mem_files(valid_input_path(idx), valid_expected_path(idx));
 
         // 2) Ownership externo
         @(negedge clk);
