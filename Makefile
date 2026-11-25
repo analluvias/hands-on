@@ -305,7 +305,7 @@ aes_mem_lint:
 	vlogan $(VLOGAN_FLAGS) $(AES_MEM_FILES)
 
 aes_mem_compile: vectors
-	vlogan -full64 -sverilog -kdb -timescale=$(TIMESCALE) -I. \
+	vlogan -full64 -sverilog -kdb -timescale=$(TIMESCALE) \
 		$(AES_MEM_FILES) $(AES_MEM_TB)
 	vcs $(VCS_FLAGS) -top $(AES_MEM_TOP) -o simv_aes_mem \
 		$(AES_MEM_FILES) $(AES_MEM_TB)

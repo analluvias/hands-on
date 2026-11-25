@@ -27,7 +27,6 @@
 `timescale 1ns/1ps
 `default_nettype none
 
-`include "tb/vectors/test_cases.svh"
 
 module minisoc_aes_top_tb;
 
@@ -41,6 +40,9 @@ module minisoc_aes_top_tb;
     localparam logic [127:0] KEY_CONST     = 128'h000102030405060708090a0b0c0d0e0f;
     localparam logic [127:0] IV_CONST      = 128'h101112131415161718191a1b1c1d1e1f;
     localparam logic [63:0]  COUNTER_CONST = 64'hDEADBEEFCAFEBABE;
+
+    `include "tb/vectors/test_cases.svh"
+
 
     // =========================================================================
     // Clocks — 100 MHz, 5 ns de offset (fases opostas)
