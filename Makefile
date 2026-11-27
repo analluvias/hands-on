@@ -220,6 +220,9 @@ spi_core_compile:
 spi_core_run: spi_core_compile
 	./simv_spi_core
 
+spi_core_wave:
+	verdi -ssf spi_core.fsdb &
+
 # ==========================================
 # SPI TX (Semana 5, Issue 4)
 # ==========================================
@@ -327,7 +330,7 @@ clean: clean_sim
 .PHONY: lint syntax compile run \
         pll_lint pll_syntax pll_compile pll_run \
         spi_rx_lint spi_rx_compile spi_rx_run \
-        spi_core_lint spi_core_compile spi_core_run \
+        spi_core_lint spi_core_compile spi_core_run spi_core_wave \
         spi_tx_lint spi_tx_compile spi_tx_run \
         spi_lint spi_compile spi_run \
         mem_lint mem_syntax mem_compile mem_run \
